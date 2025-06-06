@@ -1,14 +1,10 @@
 version: 0.1
-android_test_host: amazon_linux_2
+android_test_host: custom_docker
+docker:
+  image: node:18
 phases:
   install:
     commands:
-      - echo "Installing Node.js v18.20.0..."
-      - curl -O https://nodejs.org/dist/v18.20.0/node-v18.20.0-linux-x64.tar.xz
-      - tar -xf node-v18.20.0-linux-x64.tar.xz
-      - export PATH=$PWD/node-v18.20.0-linux-x64/bin:$PATH
-      - node -v
-      - npm -v
       - npm install @wdio/cli@latest @wdio/local-runner @wdio/spec-reporter webdriverio
   pre_test:
     commands:
