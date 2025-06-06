@@ -1,27 +1,38 @@
-version: 0.1
-android_test_host: custom_docker
-docker:
-  image: node:18
-phases:
-  install:
-    commands:
-      - npm install @wdio/cli@latest @wdio/local-runner @wdio/spec-reporter webdriverio
-  pre_test:
-    commands:
-      - echo Preparing test environment...
-  test:
-    commands:
-      - cd $DEVICEFARM_TEST_PACKAGE_PATH
-      - echo "Start Appium Node test"
-      - pwd
-      - ls -la
-      - node_modules/.bin/wdio run wdio.conf.ts
-      - echo "Starting the Appium NodeJS test"
-  post_test:
-    commands:
-      - echo Test execution complete.
-artifacts:
-  - '*/.png'
-  - '*/.mp4'
-  - '*/.log'
-  - '*/results//'
+tsonfig.ts:-
+-----------
+
+
+{
+    "compilerOptions": {
+        "moduleResolution": "node",
+        "module": "commonjs",
+        "target": "es2022",
+        "lib": [
+            "es2022",
+            "dom"
+        ],
+        "types": [
+            "node",
+            "@wdio/globals/types",
+            "expect-webdriverio",
+            "@wdio/mocha-framework"
+            // "@wdio/appium-service"
+        ],
+        "skipLibCheck": true,
+        "noEmit": true,
+        "allowImportingTsExtensions": true,
+        "resolveJsonModule": true,
+        "isolatedModules": true,
+        "strict": true,
+        "noUnusedLocals": true,
+        "noUnusedParameters": true,
+        "sourceMap": true,
+        "esModuleInterop": true,
+        "noFallthroughCasesInSwitch": true
+        // "noImplicitAny": false
+    },
+    "include": [
+        "test",
+        "wdio.conf.ts"
+    ]
+}
