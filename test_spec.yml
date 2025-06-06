@@ -1,36 +1,30 @@
 version: 0.1
-
 android_test_host: amazon_linux_2
-
 phases:
   install:
     commands:
-      - echo "Installing Node.js v16.20.2..."
-      - curl -O https://nodejs.org/dist/v16.20.2/node-v16.20.2-linux-x64.tar.xz
-      - tar -xf node-v16.20.2-linux-x64.tar.xz
-      - export PATH=$PWD/node-v16.20.2-linux-x64/bin:$PATH
+      - curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.3/install.sh | bash
+      - . ~/.nvm/nvm.sh
+      - nvm install 16
       - node -v
       - npm -v
-
+      - npm install @wdio/cli@7.16.13 @wdio/local-runner @wdio/spec-reporter webdriverio
   pre_test:
     commands:
       - echo Preparing test environment...
-
   test:
     commands:
       - cd $DEVICEFARM_TEST_PACKAGE_PATH
       - echo "Start Appium Node test"
       - pwd
       - ls -la
-      - npx wdio run wdio.conf.ts
+      - node_modules/.bin/wdio run wdio.conf.ts
       - echo "Starting the Appium NodeJS test"
-
   post_test:
     commands:
       - echo Test execution complete.
-
 artifacts:
   - '*/.png'
   - '*/.mp4'
   - '*/.log'
-  - '*/results//' 
+  - '*/results//'
