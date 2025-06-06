@@ -5,10 +5,10 @@ android_test_host: amazon_linux_2
 phases:
   install:
     commands:
-      - echo "Installing Node.js v18.16.1..."
-      - curl -O https://nodejs.org/dist/v18.16.1/node-v18.16.1-linux-x64.tar.xz
-      - tar -xf node-v18.16.1-linux-x64.tar.xz
-      - export PATH=$PWD/node-v18.16.1-linux-x64/bin:$PATH
+      - echo "Installing Node.js v16.20.2..."
+      - curl -O https://nodejs.org/dist/v16.20.2/node-v16.20.2-linux-x64.tar.xz
+      - tar -xf node-v16.20.2-linux-x64.tar.xz
+      - export PATH=$PWD/node-v16.20.2-linux-x64/bin:$PATH
       - node -v
       - npm -v
 
