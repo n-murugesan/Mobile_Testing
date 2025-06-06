@@ -1,7 +1,5 @@
 version: 0.1
-
 android_test_host: amazon_linux_2
-
 phases:
   install:
     commands:
@@ -11,24 +9,21 @@ phases:
       - export PATH=$PWD/node-v16.20.2-linux-x64/bin:$PATH
       - node -v
       - npm -v
-
+      - npm install @wdio/cli@7.16.13 @wdio/local-runner @wdio/spec-reporter webdriverio
   pre_test:
     commands:
       - echo Preparing test environment...
-
   test:
     commands:
       - cd $DEVICEFARM_TEST_PACKAGE_PATH
       - echo "Start Appium Node test"
       - pwd
       - ls -la
-      - npx wdio run wdio.conf.ts
+      - node_modules/.bin/wdio run wdio.conf.ts
       - echo "Starting the Appium NodeJS test"
-
   post_test:
     commands:
       - echo Test execution complete.
-
 artifacts:
   - '*/.png'
   - '*/.mp4'
