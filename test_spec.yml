@@ -1,4 +1,5 @@
 version: 0.1
+android_test_host: standard
 phases:
   install:
     commands:
