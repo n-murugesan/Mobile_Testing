@@ -1,34 +1,36 @@
-{
-    "compilerOptions": {
-        "moduleResolution": "node",
-        "module": "commonjs",
-        "target": "es2022",
-        "lib": [
-            "es2022",
-            "dom"
-        ],
-        "types": [
-            "node",
-            "@wdio/globals/types",
-            "expect-webdriverio",
-            "@wdio/mocha-framework"
-            // "@wdio/appium-service"
-        ],
-        "skipLibCheck": true,
-        "noEmit": true,
-        "allowImportingTsExtensions": true,
-        "resolveJsonModule": true,
-        "isolatedModules": true,
-        "strict": true,
-        "noUnusedLocals": true,
-        "noUnusedParameters": true,
-        "sourceMap": true,
-        "esModuleInterop": true,
-        "noFallthroughCasesInSwitch": true
-        // "noImplicitAny": false
-    },
-    "include": [
-        "test",
-        "wdio.conf.ts"
-    ]
-}
+version: 0.1
+
+android_test_host: amazon_linux_2
+
+phases:
+  install:
+    commands:
+      - echo "Installing Node.js v16.20.2..."
+      - curl -O https://nodejs.org/dist/v16.20.2/node-v16.20.2-linux-x64.tar.xz
+      - tar -xf node-v16.20.2-linux-x64.tar.xz
+      - export PATH=$PWD/node-v16.20.2-linux-x64/bin:$PATH
+      - node -v
+      - npm -v
+
+  pre_test:
+    commands:
+      - echo Preparing test environment...
+
+  test:
+    commands:
+      - cd $DEVICEFARM_TEST_PACKAGE_PATH
+      - echo "Start Appium Node test"
+      - pwd
+      - ls -la
+      - npx wdio run wdio.conf.ts
+      - echo "Starting the Appium NodeJS test"
+
+  post_test:
+    commands:
+      - echo Test execution complete.
+
+artifacts:
+  - '*/.png'
+  - '*/.mp4'
+  - '*/.log'
+  - '*/results//' 
