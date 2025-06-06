@@ -1,7 +1,3 @@
-tsonfig.ts:-
------------
-
-
 {
     "compilerOptions": {
         "moduleResolution": "node",
