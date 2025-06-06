@@ -1,0 +1,137 @@
+name: Appium Tests (AWS Device Farm)
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  devicefarm-appium-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: v22.16.0
+
+      - name: Install NPM Dependencies
+        run: npm ci
+
+      - name: List all files in current directory
+        run: ls -alR
+
+      - name: Install jq and unzip
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y jq unzip
+
+      - name: Install AWS CLI
+        run: |
+          curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+          unzip awscliv2.zip
+          sudo ./aws/install --update
+
+      - name: Verify required files exist
+        run: |
+          if [ ! -f "app.apk" ]; then
+            echo "❌ app.apk not found"
+            exit 1
+          fi
+          if [ ! -f "test_spec.yml" ]; then
+            echo "❌ test_spec.yml not found"
+            exit 1
+          fi
+
+      - name: ☁️ Upload & Run Tests on Device Farm
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+        run: |
+          set -e
+
+          PROJECT_NAME="AppiumDeviceFarmProject"
+          DEVICE_POOL_NAME="TopDevice"
+          APP_PATH="app.apk"
+          TESTS_ZIP_PATH="appium-tests.zip"
+          TESTSPEC_FILE="test_spec.yml"
+
+          echo "Zipping Appium test suite..."
+          zip -r "$TESTS_ZIP_PATH" ./test ./wdio.conf.ts ./package.json
+
+          echo "Getting or creating Device Farm project..."
+          PROJECT_ARN=$(aws devicefarm list-projects --query "projects[?name=='$PROJECT_NAME'].arn" --output text)
+          if [ -z "$PROJECT_ARN" ]; then
+            PROJECT_ARN=$(aws devicefarm create-project --name "$PROJECT_NAME" --query "project.arn" --output text)
+          fi
+
+          echo "Uploading APK..."
+          APP_UPLOAD=$(aws devicefarm create-upload \
+            --project-arn "$PROJECT_ARN" \
+            --name "$(basename "$APP_PATH")" \
+            --type ANDROID_APP \
+            --output json)
+          APP_UPLOAD_ARN=$(echo "$APP_UPLOAD" | jq -r '.upload.arn')
+          APP_UPLOAD_URL=$(echo "$APP_UPLOAD" | jq -r '.upload.url')
+          curl --fail -T "$APP_PATH" -H "Content-Type: application/octet-stream" "$APP_UPLOAD_URL" || { echo "❌ APK upload failed"; exit 1; }
+
+          echo "Uploading Appium test package..."
+          TEST_UPLOAD=$(aws devicefarm create-upload \
+            --project-arn "$PROJECT_ARN" \
+            --name "$(basename "$TESTS_ZIP_PATH")" \
+            --type APPIUM_NODE_TEST_PACKAGE \
+            --output json)
+          TEST_UPLOAD_ARN=$(echo "$TEST_UPLOAD" | jq -r '.upload.arn')
+          TEST_UPLOAD_URL=$(echo "$TEST_UPLOAD" | jq -r '.upload.url')
+          curl --fail -T "$TESTS_ZIP_PATH" -H "Content-Type: application/octet-stream" "$TEST_UPLOAD_URL" || { echo "❌ Test package upload failed"; exit 1; }
+
+          echo "Uploading test spec file..."
+          TESTSPEC_UPLOAD=$(aws devicefarm create-upload \
+            --project-arn "$PROJECT_ARN" \
+            --name "test_spec.yml" \
+            --type APPIUM_NODE_TEST_SPEC \
+            --output json)
+          TESTSPEC_ARN=$(echo "$TESTSPEC_UPLOAD" | jq -r '.upload.arn')
+          TESTSPEC_URL=$(echo "$TESTSPEC_UPLOAD" | jq -r '.upload.url')
+          curl --fail -T "$TESTSPEC_FILE" -H "Content-Type: application/octet-stream" "$TESTSPEC_URL" || { echo "❌ Test spec upload failed"; exit 1; }
+
+          echo "Waiting for uploads to complete..."
+          wait_for_upload() {
+            local upload_arn=$1
+            while true; do
+              status=$(aws devicefarm get-upload --arn "$upload_arn" --query "upload.status" --output text)
+              echo "Upload status for $upload_arn: $status"
+              if [ "$status" == "SUCCEEDED" ]; then
+                break
+              elif [ "$status" == "FAILED" ]; then
+                echo "❌ Upload failed: $upload_arn"
+                exit 1
+              fi
+              sleep 5
+            done
+          }
+
+          wait_for_upload "$APP_UPLOAD_ARN"
+          wait_for_upload "$TEST_UPLOAD_ARN"
+          wait_for_upload "$TESTSPEC_ARN"
+
+          echo "Getting Device Pool ARN..."
+          DEVICE_POOL_ARN=$(aws devicefarm list-device-pools --arn "$PROJECT_ARN" --query "devicePools[?name=='$DEVICE_POOL_NAME'].arn" --output text)
+          if [ -z "$DEVICE_POOL_ARN" ]; then
+            echo "❌ Device pool '$DEVICE_POOL_NAME' not found. Please create it in AWS Console."
+            exit 1
+          fi
+
+          echo "Scheduling test run..."
+          RUN=$(aws devicefarm schedule-run \
+            --project-arn "$PROJECT_ARN" \
+            --app-arn "$APP_UPLOAD_ARN" \
+            --device-pool-arn "$DEVICE_POOL_ARN" \
+            --name "Appium Test Run $(date +%s)" \
+            --test type=APPIUM_NODE,testPackageArn="$TEST_UPLOAD_ARN",testSpecArn="$TESTSPEC_ARN")
+
+          echo "✅ Test run scheduled successfully!"
+          echo "Run ARN: $(echo $RUN | jq -r '.run.arn')"
