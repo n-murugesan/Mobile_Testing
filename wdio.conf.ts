@@ -56,7 +56,7 @@ export const config: WebdriverIO.Config = {
         'platformName': 'Android',
         // 'browserName': 'Chrome',
         'appium:deviceName': 'emulator-5554',
-        'appium:platformVersion': '16.0',
+        'appium:platformVersion': '15.0',
         'appium:automationName': 'UiAutomator2',
         'appium:app': 'C:\\Users\\nmurugesan\\Downloads\\app-release.apk',
         'appium:autoGrantPermissions': true,
