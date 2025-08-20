@@ -1,21 +1,27 @@
-name: Appium Tests (AWS Device Farm)
+name: Appium Tests (GitHub Actions)
 
 on:
   push:
   workflow_dispatch:
 
 jobs:
-  devicefarm-appium-test:
+  appium-emulator-test:
     runs-on: ubuntu-latest
+    timeout-minutes: 30  
 
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Set up Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
-          node-version: v22.16.0
+          node-version: '22.16.0'
+
+      - name: Verify Node.js Version
+        run: |
+          node -v
+          npm -v
 
       - name: Install NPM Dependencies
         run: npm ci
@@ -23,116 +29,71 @@ jobs:
       - name: List all files in current directory
         run: ls -alR
 
-      - name: Install jq and unzip
+      - name: Enable KVM for Hardware Acceleration
         run: |
-          sudo apt-get update
-          sudo apt-get install -y jq unzip
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
 
-      - name: Install AWS CLI
-        run: |
-          curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
-          unzip awscliv2.zip
-          sudo ./aws/install --update
+      - name: Cache AVD Snapshot
+        uses: actions/cache@v4
+        id: avd-cache
+        with:
+          path: |
+            ~/.android/avd/*
+            ~/.android/adb*
+          key: avd-36 
 
-      - name: Verify required files exist
-        run: |
-          if [ ! -f "app.apk" ]; then
-            echo "❌ app.apk not found"
-            exit 1
-          fi
-          if [ ! -f "test_spec.yml" ]; then
-            echo "❌ test_spec.yml not found"
-            exit 1
-          fi
+      - name: Create AVD Snapshot (if not cached)
+        if: steps.avd-cache.outputs.cache-hit != 'true'
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 36 
+          arch: x86_64  
+          ram-size: 2048M  
+          disk-size: 2048M
+          force-avd-creation: false
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          disable-animations: true
+          script: echo "Generated AVD snapshot for caching."
 
-      - name: ☁️ Upload & Run Tests on Device Farm
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          AWS_REGION: us-west-2
-        run: |
-          set -e
+      - name: Run Appium Tests on Emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 36  
+          arch: x86_64
+          ram-size: 2048M
+          disk-size: 2048M
+          force-avd-creation: false
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          disable-animations: true
+          script: |
+            # Install Appium and UiAutomator2 driver
+            npm install -g appium@2.6.0  # Stable version for Node.js 22.16.0
+            appium driver install uiautomator2@3.0.0  # Latest stable driver
 
-          PROJECT_NAME="AppiumDeviceFarmProject"
-          DEVICE_POOL_NAME="TopDevice"
-          APP_PATH="app.apk"
-          TESTS_ZIP_PATH="appium-tests.zip"
-          TESTSPEC_FILE="test_spec.yml"
+            # Start Appium server in background
+            appium --relaxed-security &  # Relaxed security for CI
+            sleep 10  # Wait for Appium to start
 
-          echo "Zipping Appium test suite..."
-          zip -r "$TESTS_ZIP_PATH" ./test ./wdio.conf.ts ./package.json
+            # Wait for emulator to be fully booted
+            adb wait-for-device
+            adb shell 'while [[ -z $(getprop sys.boot_completed) ]]; do sleep 1; done;'
 
-          echo "Getting or creating Device Farm project..."
-          PROJECT_ARN=$(aws devicefarm list-projects --query "projects[?name=='$PROJECT_NAME'].arn" --output text)
-          if [ -z "$PROJECT_ARN" ]; then
-            PROJECT_ARN=$(aws devicefarm create-project --name "$PROJECT_NAME" --query "project.arn" --output text)
-          fi
+            # Install the APK on the emulator
+            adb install app.apk
 
-          echo "Uploading APK..."
-          APP_UPLOAD=$(aws devicefarm create-upload \
-            --project-arn "$PROJECT_ARN" \
-            --name "$(basename "$APP_PATH")" \
-            --type ANDROID_APP \
-            --output json)
-          APP_UPLOAD_ARN=$(echo "$APP_UPLOAD" | jq -r '.upload.arn')
-          APP_UPLOAD_URL=$(echo "$APP_UPLOAD" | jq -r '.upload.url')
-          curl --fail -T "$APP_PATH" -H "Content-Type: application/octet-stream" "$APP_UPLOAD_URL" || { echo "❌ APK upload failed"; exit 1; }
+            # Run WDIO tests
+            npx wdio run wdio.conf.ts
 
-          echo "Uploading Appium test package..."
-          TEST_UPLOAD=$(aws devicefarm create-upload \
-            --project-arn "$PROJECT_ARN" \
-            --name "$(basename "$TESTS_ZIP_PATH")" \
-            --type APPIUM_NODE_TEST_PACKAGE \
-            --output json)
-          TEST_UPLOAD_ARN=$(echo "$TEST_UPLOAD" | jq -r '.upload.arn')
-          TEST_UPLOAD_URL=$(echo "$TEST_UPLOAD" | jq -r '.upload.url')
-          curl --fail -T "$TESTS_ZIP_PATH" -H "Content-Type: application/octet-stream" "$TEST_UPLOAD_URL" || { echo "❌ Test package upload failed"; exit 1; }
+            # Collect logs for debugging
+            adb logcat -d > emulator_logcat.txt || true
 
-          echo "Uploading test spec file..."
-          TESTSPEC_UPLOAD=$(aws devicefarm create-upload \
-            --project-arn "$PROJECT_ARN" \
-            --name "test_spec.yml" \
-            --type APPIUM_NODE_TEST_SPEC \
-            --output json)
-          TESTSPEC_ARN=$(echo "$TESTSPEC_UPLOAD" | jq -r '.upload.arn')
-          TESTSPEC_URL=$(echo "$TESTSPEC_UPLOAD" | jq -r '.upload.url')
-          curl --fail -T "$TESTSPEC_FILE" -H "Content-Type: application/octet-stream" "$TESTSPEC_URL" || { echo "❌ Test spec upload failed"; exit 1; }
-
-          echo "Waiting for uploads to complete..."
-          wait_for_upload() {
-            local upload_arn=$1
-            while true; do
-              status=$(aws devicefarm get-upload --arn "$upload_arn" --query "upload.status" --output text)
-              echo "Upload status for $upload_arn: $status"
-              if [ "$status" == "SUCCEEDED" ]; then
-                break
-              elif [ "$status" == "FAILED" ]; then
-                echo "❌ Upload failed: $upload_arn"
-                exit 1
-              fi
-              sleep 5
-            done
-          }
-
-          wait_for_upload "$APP_UPLOAD_ARN"
-          wait_for_upload "$TEST_UPLOAD_ARN"
-          wait_for_upload "$TESTSPEC_ARN"
-
-          echo "Getting Device Pool ARN..."
-          DEVICE_POOL_ARN=$(aws devicefarm list-device-pools --arn "$PROJECT_ARN" --query "devicePools[?name=='$DEVICE_POOL_NAME'].arn" --output text)
-          if [ -z "$DEVICE_POOL_ARN" ]; then
-            echo "❌ Device pool '$DEVICE_POOL_NAME' not found. Please create it in AWS Console."
-            exit 1
-          fi
-
-          echo "Scheduling test run..."
-          RUN=$(aws devicefarm schedule-run \
-            --project-arn "$PROJECT_ARN" \
-            --app-arn "$APP_UPLOAD_ARN" \
-            --device-pool-arn "$DEVICE_POOL_ARN" \
-            --name "Appium Test Run $(date +%s)" \
-            --test type=APPIUM_NODE,testPackageArn="$TEST_UPLOAD_ARN",testSpecArn="$TESTSPEC_ARN")
-            
-
-          echo "✅ Test run scheduled successfully!"
-          echo "Run ARN: $(echo $RUN | jq -r '.run.arn')"
+      - name: Upload Test Artifacts
+        if: always() 
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-artifacts
+          path: |
+            allure-results/
+            emulator_logcat.txt
