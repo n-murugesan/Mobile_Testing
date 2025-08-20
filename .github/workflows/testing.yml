@@ -15,7 +15,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v3
         with:
-          node-version: v22.16.0
+          node-version: v16.20.2
 
       - name: Install NPM Dependencies
         run: npm ci
