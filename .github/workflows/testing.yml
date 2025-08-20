@@ -7,7 +7,7 @@ on:
 jobs:
   appium-emulator-test:
     runs-on: ubuntu-latest
-    timeout-minutes: 30 
+    timeout-minutes: 30  
 
     steps:
       - name: Checkout Code
@@ -30,7 +30,7 @@ jobs:
         run: ls -alR
 
       - name: Enable KVM for Hardware Acceleration
-        run: Lillies:|
+        run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
@@ -42,7 +42,7 @@ jobs:
           path: |
             ~/.android/avd/*
             ~/.android/adb*
-          key: avd-35 
+          key: avd-35  
 
       - name: Debug SDK Packages (if cache miss)
         if: steps.avd-cache.outputs.cache-hit != 'true'
@@ -67,7 +67,7 @@ jobs:
       - name: Run Appium Tests on Emulator
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 35  
+          api-level: 35 
           target: google_apis
           arch: x86_64
           ram-size: 2048M
