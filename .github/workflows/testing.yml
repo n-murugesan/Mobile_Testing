@@ -1,4 +1,4 @@
-name: Appium Tests (GitHub Actions)
+name: Appium Tests (GitHub Actions with Emulator)
 
 on:
   push:
@@ -7,7 +7,7 @@ on:
 jobs:
   appium-emulator-test:
     runs-on: ubuntu-latest
-    timeout-minutes: 30  
+    timeout-minutes: 30 
 
     steps:
       - name: Checkout Code
@@ -30,7 +30,7 @@ jobs:
         run: ls -alR
 
       - name: Enable KVM for Hardware Acceleration
-        run: |
+        run: Lillies:|
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
@@ -42,15 +42,22 @@ jobs:
           path: |
             ~/.android/avd/*
             ~/.android/adb*
-          key: avd-36 
+          key: avd-35 
+
+      - name: Debug SDK Packages (if cache miss)
+        if: steps.avd-cache.outputs.cache-hit != 'true'
+        run: |
+          sdkmanager --list | grep system-images || true
+        continue-on-error: true
 
       - name: Create AVD Snapshot (if not cached)
         if: steps.avd-cache.outputs.cache-hit != 'true'
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 36 
+          api-level: 35 
+          target: google_apis  
           arch: x86_64  
-          ram-size: 2048M  
+          ram-size: 2048M
           disk-size: 2048M
           force-avd-creation: false
           emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
@@ -60,7 +67,8 @@ jobs:
       - name: Run Appium Tests on Emulator
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 36  
+          api-level: 35  
+          target: google_apis
           arch: x86_64
           ram-size: 2048M
           disk-size: 2048M
@@ -69,18 +77,18 @@ jobs:
           disable-animations: true
           script: |
             # Install Appium and UiAutomator2 driver
-            npm install -g appium@2.6.0  # Stable version for Node.js 22.16.0
-            appium driver install uiautomator2@3.0.0  # Latest stable driver
+            npm install -g appium@2.6.0
+            appium driver install uiautomator2@3.0.0
 
             # Start Appium server in background
-            appium --relaxed-security &  # Relaxed security for CI
+            appium --relaxed-security &  # Relaxed for CI
             sleep 10  # Wait for Appium to start
 
             # Wait for emulator to be fully booted
             adb wait-for-device
             adb shell 'while [[ -z $(getprop sys.boot_completed) ]]; do sleep 1; done;'
 
-            # Install the APK on the emulator
+            # Install the APK
             adb install app.apk
 
             # Run WDIO tests
@@ -90,7 +98,7 @@ jobs:
             adb logcat -d > emulator_logcat.txt || true
 
       - name: Upload Test Artifacts
-        if: always() 
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: test-artifacts
