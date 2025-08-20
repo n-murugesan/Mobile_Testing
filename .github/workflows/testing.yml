@@ -132,6 +132,7 @@ jobs:
             --device-pool-arn "$DEVICE_POOL_ARN" \
             --name "Appium Test Run $(date +%s)" \
             --test type=APPIUM_NODE,testPackageArn="$TEST_UPLOAD_ARN",testSpecArn="$TESTSPEC_ARN")
+            
 
           echo "✅ Test run scheduled successfully!"
           echo "Run ARN: $(echo $RUN | jq -r '.run.arn')"
