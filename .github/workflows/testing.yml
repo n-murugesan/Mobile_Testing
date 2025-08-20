@@ -7,8 +7,7 @@ on:
 jobs:
   appium-emulator-test:
     runs-on: ubuntu-latest
-    timeout-minutes: 30  
-
+    timeout-minutes: 30 
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -42,7 +41,7 @@ jobs:
           path: |
             ~/.android/avd/*
             ~/.android/adb*
-          key: avd-35  
+          key: avd-35 
 
       - name: Debug SDK Packages (if cache miss)
         if: steps.avd-cache.outputs.cache-hit != 'true'
@@ -54,9 +53,9 @@ jobs:
         if: steps.avd-cache.outputs.cache-hit != 'true'
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 35 
-          target: google_apis  
-          arch: x86_64  
+          api-level: 35  
+          target: google_apis
+          arch: x86_64
           ram-size: 2048M
           disk-size: 2048M
           force-avd-creation: false
@@ -67,7 +66,7 @@ jobs:
       - name: Run Appium Tests on Emulator
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 35 
+          api-level: 35  
           target: google_apis
           arch: x86_64
           ram-size: 2048M
@@ -76,9 +75,11 @@ jobs:
           emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           disable-animations: true
           script: |
-            # Install Appium and UiAutomator2 driver
+            # Install Appium
             npm install -g appium@2.6.0
-            appium driver install uiautomator2@3.0.0
+
+            # Verify UiAutomator2 driver is available
+            appium driver list --installed
 
             # Start Appium server in background
             appium --relaxed-security &  # Relaxed for CI
