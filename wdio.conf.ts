@@ -58,7 +58,7 @@ export const config: WebdriverIO.Config = {
         'appium:deviceName': 'emulator-5554',
         'appium:platformVersion': '15.0',
         'appium:automationName': 'UiAutomator2',
-        'appium:app': 'C:\\Users\\nmurugesan\\Downloads\\app-release.apk',
+        'appium:app': 'app.apk',
         'appium:autoGrantPermissions': true,
         // 'appium:avd': 'Pixel_9_Pro',
         "port":4723
