@@ -7,7 +7,8 @@ on:
 jobs:
   appium-emulator-test:
     runs-on: ubuntu-latest
-    timeout-minutes: 30 
+    timeout-minutes: 30  
+
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -41,7 +42,7 @@ jobs:
           path: |
             ~/.android/avd/*
             ~/.android/adb*
-          key: avd-35 
+          key: avd-35  
 
       - name: Debug SDK Packages (if cache miss)
         if: steps.avd-cache.outputs.cache-hit != 'true'
@@ -53,7 +54,7 @@ jobs:
         if: steps.avd-cache.outputs.cache-hit != 'true'
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 35  
+          api-level: 35 
           target: google_apis
           arch: x86_64
           ram-size: 2048M
@@ -65,6 +66,8 @@ jobs:
 
       - name: Run Appium Tests on Emulator
         uses: reactivecircus/android-emulator-runner@v2
+        env:
+          ANDROID_EMULATOR_WAIT_TIME_BEFORE_KILL: 90  
         with:
           api-level: 35  
           target: google_apis
@@ -75,6 +78,8 @@ jobs:
           emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           disable-animations: true
           script: |
+            set -e  # Exit on any error
+
             # Install Appium
             npm install -g appium@2.6.0
 
@@ -89,14 +94,17 @@ jobs:
             adb wait-for-device
             adb shell 'while [[ -z $(getprop sys.boot_completed) ]]; do sleep 1; done;'
 
+            # Verify emulator is detected
+            adb devices >> emulator_logcat.txt
+
             # Install the APK
             adb install app.apk
 
-            # Run WDIO tests
-            npx wdio run wdio.conf.ts
+            # Run WDIO tests and capture output
+            npx wdio run wdio.conf.ts | tee wdio_output.txt
 
             # Collect logs for debugging
-            adb logcat -d > emulator_logcat.txt || true
+            adb logcat -d >> emulator_logcat.txt || true
 
       - name: Upload Test Artifacts
         if: always()
@@ -106,3 +114,4 @@ jobs:
           path: |
             allure-results/
             emulator_logcat.txt
+            wdio_output.txt
