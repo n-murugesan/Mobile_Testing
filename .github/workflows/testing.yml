@@ -7,13 +7,13 @@ on:
 jobs:
   appium-emulator-test:
     runs-on: ubuntu-latest
-    timeout-minutes: 30  
+    timeout-minutes: 30  # Allow time for emulator boot and tests
 
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
         with:
-          lfs: true 
+          lfs: true  # Enable Git LFS to fetch default_boot.zip
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -44,9 +44,9 @@ jobs:
           path: |
             ~/.android/avd/*
             ~/.android/adb*
-          key: avd-35-logged-in  
+          key: avd-35-default-boot  # Cache key for default_boot snapshot
 
-      - name: Restore Custom Logged-In Snapshot
+      - name: Restore Custom Snapshot
         run: |
           mkdir -p ~/.android/avd/test_avd.avd/snapshots
           unzip emulator_snapshots/default_boot.zip -d ~/.android/avd/test_avd.avd/snapshots/default_boot
@@ -67,55 +67,63 @@ jobs:
           arch: x86_64
           ram-size: 2048M
           disk-size: 2048M
-          force-avd-creation: false
-          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          force-avd-creation: true  # Ensure AVD is created
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           disable-animations: true
           script: echo "Generated AVD for caching."
 
       - name: Run Appium Tests on Emulator
+        uses: reactivecircus/android-emulator-runner@v2
         env:
-          ANDROID_EMULATOR_WAIT_TIME_BEFORE_KILL: 90 
-        run: |
-          set -e  # Exit on any error
+          ANDROID_EMULATOR_WAIT_TIME_BEFORE_KILL: 60  # 60s for emulator shutdown
+        with:
+          avd-name: test_avd
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          ram-size: 2048M
+          disk-size: 2048M
+          force-avd-creation: false
+          emulator-options: -snapshot default_boot -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          disable-animations: true
+          script: |
+            set -e  # Exit on any error
 
-          # Start emulator with default_boot snapshot
-          /usr/local/lib/android/sdk/emulator/emulator -avd test_avd -snapshot default_boot -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none &
+            # Install Appium
+            npm install -g appium@2.6.0
 
-          # Install Appium
-          npm install -g appium@2.6.0
+            # Verify UiAutomator2 driver
+            appium driver list --installed
 
-          # Verify UiAutomator2 driver
-          appium driver list --installed
+            # Start Appium server
+            appium --relaxed-security &
+            sleep 10
 
-          # Start Appium server
-          appium --relaxed-security &
-          sleep 10
+            # Wait for emulator boot
+            adb wait-for-device
+            adb shell 'while [[ -z $(getprop sys.boot_completed) ]]; do sleep 1; done;'
 
-          # Wait for emulator boot
-          adb wait-for-device
-          adb shell 'while [[ -z $(getprop sys.boot_completed) ]]; do sleep 1; done;'
+            # Verify emulator
+            adb devices >> emulator_logcat.txt
 
-          # Verify emulator
-          adb devices >> emulator_logcat.txt
+            # Install APK (if not in snapshot)
+            adb install app.apk
 
-          # Install APK (if not in snapshot)
-          adb install app.apk
+            # Log current activity
+            adb shell dumpsys window | grep mCurrentFocus >> emulator_logcat.txt || true
 
-          # Log current activity
-          adb shell dumpsys window | grep mCurrentFocus >> emulator_logcat.txt || true
+            # Run WDIO tests
+            npx wdio run wdio.conf.ts | tee wdio_output.txt
 
-          # Run WDIO tests
-          npx wdio run wdio.conf.ts | tee wdio_output.txt
+            # Capture screenshot
+            adb shell screencap /sdcard/screenshot.png || true
+            adb pull /sdcard/screenshot.png ./screenshot.png || true
 
-          # Capture screenshot
-          adb shell screencap /sdcard/screenshot.png || true
-          adb pull /sdcard/screenshot.png ./screenshot.png || true
+            # Collect logs
+            adb logcat -d >> emulator_logcat.txt || true
 
-          # Collect logs
-          adb logcat -d >> emulator_logcat.txt || true
-
-          # Force kill emulator
-          adb -s emulator-5554 emu kill || true
+            # Force kill emulator
+            adb -s emulator-5554 emu kill || true
 
       - name: Upload Test Artifacts
         if: always()
