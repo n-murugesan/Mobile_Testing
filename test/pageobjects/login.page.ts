@@ -1,4 +1,5 @@
 import { addStep, addAttachment } from '@wdio/allure-reporter';
+import { TIMEOUT } from 'dns';
 import 'dotenv/config';
 
 type Inputs = {
@@ -29,7 +30,7 @@ export class LoginPage {
 
   constructor() {
     this.inputs = {
-      accountTxtBox: () => $('//android.widget.EditText'),
+      accountTxtBox: () => $('android =new UiSelector().className("android.widget.EditText")'),
       email: ()=> $('//android.widget.EditText[@resource-id="email-form-item"]'),
       password: () => $('//android.widget.EditText[@resource-id="password-form-item"]'),
     },
@@ -59,8 +60,8 @@ export class LoginPage {
       console.log("Clicked on Apply button");
       await this.buttons.Login().click();
       console.log("Clicked on Login button");
-      await browser.pause(5000);
-      await this.inputs.accountTxtBox().waitForDisplayed({ timeout: 30000 });
+      await browser.pause(10000);
+      await this.inputs.accountTxtBox().waitForDisplayed({timeout: 30000 });
       await this.inputs.accountTxtBox().setValue(process.env.Account_Val!);
       console.log("Entered the account value");
       const isNoOptionsVisible = await this.buttons.noOptions().isDisplayed();
