@@ -1,4 +1,4 @@
-import LoginPage from '../pageobjects/login.page'
+import {LoginPage} from '../pageobjects/login.page';
 
 
 // describe('My test', () => {
@@ -10,9 +10,11 @@ import LoginPage from '../pageobjects/login.page'
 
 
 describe('My Login application', () => {
+    const loginPage = new LoginPage();
     it('should login with valid credentials', async () => {
-        await LoginPage.open()
-        await LoginPage.login()
+        await loginPage.open();
+        console.log("Opened the page");
+        await loginPage.login(process.env.EMAIL!, process.env.PASSWORD!);
     })
 })
 
