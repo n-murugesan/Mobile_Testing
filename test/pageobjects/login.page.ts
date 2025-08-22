@@ -59,6 +59,7 @@ export class LoginPage {
       console.log("Clicked on Apply button");
       await this.buttons.Login().click();
       console.log("Clicked on Login button");
+      await browser.pause(5000);
       await this.inputs.accountTxtBox().waitForDisplayed({ timeout: 30000 });
       await this.inputs.accountTxtBox().setValue(process.env.Account_Val!);
       console.log("Entered the account value");
