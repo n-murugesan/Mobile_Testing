@@ -6,6 +6,7 @@ type Inputs = {
   accountTxtBox: () => ChainablePromiseElement;
   email:() =>  ChainablePromiseElement;
   password: () => ChainablePromiseElement;
+  value1: () => ChainablePromiseElement;
 };
 type Buttons = {
   Login: () => ChainablePromiseElement;
@@ -33,6 +34,7 @@ export class LoginPage {
       accountTxtBox: () => $('android =new UiSelector().className("android.widget.EditText")'),
       email: ()=> $('//android.widget.EditText[@resource-id="email-form-item"]'),
       password: () => $('//android.widget.EditText[@resource-id="password-form-item"]'),
+      value1 : () => $('android=new UiSelector().text("Login")')
     },
       this.buttons = {
         Login: () => $('//android.widget.Button[@content-desc="Login"]'),
@@ -61,6 +63,9 @@ export class LoginPage {
       await this.buttons.Login().click();
       console.log("Clicked on Login button");
       await browser.pause(10000);
+      await this.inputs.value1().waitForDisplayed({timeout:30000});
+      await this.inputs.value1().click();
+      console.log("Clicked on Login button in the new screen");
       await this.inputs.accountTxtBox().waitForDisplayed({timeout: 30000 });
       await this.inputs.accountTxtBox().setValue(process.env.Account_Val!);
       console.log("Entered the account value");
