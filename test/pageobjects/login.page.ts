@@ -63,6 +63,30 @@ export class LoginPage {
       await this.buttons.Login().click();
       console.log("Clicked on Login button");
       await browser.pause(10000);
+      try {
+            // Capture screenshot of current screen
+            await driver.saveScreenshot('./screenshots/before_account_set.png');
+            console.log('Screenshot captured before setting account value.');
+
+            // Capture page source (XML dump of UI hierarchy for inspection)
+            const pageSource = await driver.getPageSource();
+            console.log('Page Source before setValue: ', pageSource);
+            // Save to file for artifact upload
+            const fs = require('fs');
+            fs.writeFileSync('./logs/page_source_before_set.txt', pageSource);
+
+            // Capture available contexts (detects if WebView/browser opened during sign-in)
+            const contexts = await driver.getContexts();
+            console.log('Available Contexts: ', contexts);
+            fs.writeFileSync('./logs/contexts_before_set.txt', JSON.stringify(contexts, null, 2));
+
+            // Capture device logs (ADB logcat snippet for errors)
+            const logs = await driver.getLogs('logcat');  // Requires 'appium:chromedriverArgs': ['--enable-logging'] in caps for Chrome logs
+            fs.writeFileSync('./logs/device_logs_before_set.txt', logs.join('\n'));
+          } 
+        catch (err) {
+            console.error('Diagnostic capture failed: ', err);
+          }
       await this.inputs.value1().waitForDisplayed({timeout:30000});
       await this.inputs.value1().click();
       console.log("Clicked on Login button in the new screen");
