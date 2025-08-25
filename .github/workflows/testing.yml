@@ -28,9 +28,6 @@ jobs:
       - name: Install NPM Dependencies
         run: npm ci
 
-      - name: List all files in current directory
-        run: ls -alR
-
       - name: Enable KVM for Hardware Acceleration
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
