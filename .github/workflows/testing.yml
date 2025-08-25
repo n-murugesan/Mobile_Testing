@@ -42,97 +42,102 @@ jobs:
           path: |
             ~/.android/avd/*
             ~/.android/adb*
-          key: avd-35  
+          key: avd-35
 
       - name: Debug SDK Packages (if cache miss)
         if: steps.avd-cache.outputs.cache-hit != 'true'
         run: |
           sdkmanager --list | grep system-images || true
-        continue-on-error: true  # Debug only; don't fail here
+        continue-on-error: true
 
       - name: Create AVD Snapshot (if not cached)
         if: steps.avd-cache.outputs.cache-hit != 'true'
         uses: reactivecircus/android-emulator-runner@v2
-        timeout-minutes: 10  # Fail this step if >10 min
+        timeout-minutes: 10
         with:
-          api-level: 35 
+          api-level: 35
           target: google_apis
           arch: x86_64
           ram-size: 2048M
           disk-size: 2048M
-          force-avd-creation: false
-          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          force-avd-creation: true  # Ensure AVD is created
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           disable-animations: true
           script: echo "Generated AVD snapshot for caching."
 
       - name: Run Appium Tests on Emulator
         uses: reactivecircus/android-emulator-runner@v2
         env:
-          ANDROID_EMULATOR_WAIT_TIME_BEFORE_KILL: 90  
-        timeout-minutes: 40  # Step timeout aligns with job
+          ANDROID_EMULATOR_WAIT_TIME_BEFORE_KILL: 90
+        timeout-minutes: 40
         with:
-          api-level: 35  
+          api-level: 35
           target: google_apis
           arch: x86_64
           ram-size: 2048M
           disk-size: 2048M
           force-avd-creation: false
-          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           disable-animations: true
           script: |
-            set -euo pipefail  # Strict: Fail on errors, unset vars, pipe failures
+            # Use bash explicitly to support pipefail
+            /bin/bash -c "
+              set -euo pipefail
 
-            # Install Appium
-            npm install -g appium@2.6.0
+              # Install Appium
+              npm install -g appium@2.6.0
 
-            # Verify UiAutomator2 driver is available
-            appium driver list --installed
+              # Verify UiAutomator2 driver
+              appium driver list --installed
 
-            # Start Appium server in background
-            appium --relaxed-security &  # Relaxed for CI
-            sleep 10  # Wait for Appium to start
+              # Start Appium server
+              appium --relaxed-security &  # Relaxed for CI
+              sleep 10
 
-            # Wait for emulator to be fully booted
-            adb wait-for-device
-            adb shell 'while [[ -z $(getprop sys.boot_completed) ]]; do sleep 1; done;'
+              # Wait for emulator boot
+              adb wait-for-device
+              adb shell 'while [[ -z \$(getprop sys.boot_completed) ]]; do sleep 1; done;'
 
-            # Verify emulator is detected
-            adb devices >> emulator_logcat.txt
+              # Verify emulator
+              adb devices >> emulator_logcat.txt
 
-            # Install the APK
-            adb install app.apk
+              # Install APK
+              adb install app.apk
 
-            # Run WDIO tests in background with monitoring loop
-            npx wdio run wdio.conf.ts | tee wdio_output.txt &
-            PID=$!  # Get process ID
+              # Create directories for diagnostics
+              mkdir -p screenshots logs
 
-            INTERVAL=5  # Minutes between checks
-            MAX_MIN=35  # Max before forced fail
-            ELAPSED=0
+              # Run tests in background with timeout monitoring
+              npx wdio run wdio.conf.ts | tee wdio_output.txt &
+              PID=\$!
+              INTERVAL=5
+              MAX_MIN=35
+              ELAPSED=0
 
-            while kill -0 $PID 2>/dev/null; do  # While process running
-              sleep ${INTERVAL}m
-              ELAPSED=$((ELAPSED + INTERVAL))
-              echo "Test Elapsed: ${ELAPSED} minutes - Still running..."
-              if [ $ELAPSED -ge $MAX_MIN ]; then
-                echo "Timeout: Failing after ${MAX_MIN} minutes of no completion."
-                kill -9 $PID  # Force kill
-                exit 1  # Fail workflow
+              while kill -0 \$PID 2>/dev/null; do
+                sleep \${INTERVAL}m
+                ELAPSED=\$((ELAPSED + INTERVAL))
+                echo \"Test Elapsed: \${ELAPSED} minutes - Still running...\"
+                if [ \$ELAPSED -ge \$MAX_MIN ]; then
+                  echo \"Timeout: Failing after \${MAX_MIN} minutes.\"
+                  kill -9 \$PID
+                  exit 1
+                fi
+              done
+
+              wait \$PID
+              EXIT_CODE=\$?
+              if [ \$EXIT_CODE -ne 0 ]; then
+                echo \"Tests failed with code \$EXIT_CODE\"
+                exit \$EXIT_CODE
               fi
-            done
 
-            wait $PID  # Wait for normal exit
-            EXIT_CODE=$?
-            if [ $EXIT_CODE -ne 0 ]; then
-              echo "Tests failed with code $EXIT_CODE"
-              exit $EXIT_CODE  # Propagate failure
-            fi
-
-            # Collect logs for debugging
-            adb logcat -d >> emulator_logcat.txt || true
+              # Collect logs
+              adb logcat -d >> emulator_logcat.txt || true
+            "
 
       - name: Upload Test Artifacts
-        if: always()  # Always upload, even on failure/timeout
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: test-artifacts
@@ -140,5 +145,5 @@ jobs:
             allure-results/
             emulator_logcat.txt
             wdio_output.txt
-            screenshots/  # New: Your captured screenshots
-            logs/  # New: Page source, contexts, device logs
+            screenshots/
+            logs/
