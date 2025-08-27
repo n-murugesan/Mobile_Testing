@@ -31,34 +31,34 @@ jobs:
       - name: Install SDK components & create AVD
         run: |
           set -euxo pipefail
+          
           SDK_ROOT=${SDK_ROOT:-/usr/local/lib/android/sdk}
           AVD_NAME=${AVD_NAME:-api35-x86_64-play}
           AVD_DIR="$HOME/.android/avd/${AVD_NAME}.avd"
           
-          # (Optional) avoid sdkmanager warning if repos file missing
+          # Avoid repositories warning
           mkdir -p "$HOME/.android" && : > "$HOME/.android/repositories.cfg"
           
-          # Accept licenses & install packages
-          yes | "${SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager" --licenses
+          # Accept licenses (avoid SIGPIPE -> non-zero)
+          set +o pipefail
+          yes | "${SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null
+          set -o pipefail
+          
+          # Install packages
           "${SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager" --install \
             "platform-tools" "platforms;android-35" "emulator" \
             "system-images;android-35;google_apis_playstore;x86_64"
           
-          # Create AVD (non-interactive)
+          # Create AVD
           echo "no" | "${SDK_ROOT}/cmdline-tools/latest/bin/avdmanager" create avd \
             --force -n "${AVD_NAME}" \
             --package "system-images;android-35;google_apis_playstore;x86_64" \
             --abi "google_apis_playstore/x86_64"
           
-          # Verify AVD directory now exists (guard against race)
-          if [ ! -d "$AVD_DIR" ]; then
-            echo "ERROR: AVD dir not created: $AVD_DIR"
-            ls -la "$HOME/.android/avd" || true
-            exit 1
-          fi
-          
-          # Safe to tweak config now
+          # Verify and tweak
+          [ -d "$AVD_DIR" ] || { echo "ERROR: AVD dir not created: $AVD_DIR"; ls -la "$HOME/.android/avd" || true; exit 1; }
           printf 'hw.cpu.ncore=3\n' >> "$AVD_DIR/config.ini"
+
 
 
 
