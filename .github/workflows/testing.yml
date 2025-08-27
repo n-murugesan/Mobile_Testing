@@ -55,8 +55,19 @@ jobs:
             echo 'Snapshot extracted.'
             ls -l ~/.android/avd/test_avd.avd/snapshots/snap_2025-08-27_10-53-29 || echo 'Snapshot directory listing failed.'
             chmod -R u+rw ~/.android/avd/test_avd.avd/snapshots/snap_2025-08-27_10-53-29 || echo 'Failed to set snapshot permissions.'
+            # Rename your custom snapshot to 'default_boot' so the emulator loads it by default
+            if [ -d ~/.android/avd/test_avd.avd/snapshots/snap_2025-08-27_10-53-29 ]; then
+              rm -rf ~/.android/avd/test_avd.avd/snapshots/default_boot || true
+              mv ~/.android/avd/test_avd.avd/snapshots/snap_2025-08-27_10-53-29 ~/.android/avd/test_avd.avd/snapshots/default_boot
+              echo 'Renamed snapshot to default_boot.'
+            fi
             ls -l ~/.android/avd/test_avd.avd/snapshots/ > snapshot_dir.txt
           "
+
+      - name: Pre-start ADB (helps emulator talk to daemon on 5037)
+        run: |
+          adb start-server
+          adb devices || true
 
       - name: Debug SDK Packages (if cache miss)
         if: steps.avd-cache.outputs.cache-hit != 'true'
@@ -75,7 +86,8 @@ jobs:
           ram-size: 2048M
           disk-size: 2048M
           force-avd-creation: true
-          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          # Prevent any snapshot load/save here so we don't see 'default_boot' warnings during this preparatory run
+          emulator-options: -no-snapshot -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -no-metrics
           disable-animations: true
           script: echo "Generated AVD config for caching."
 
@@ -91,21 +103,29 @@ jobs:
           ram-size: 2048M
           disk-size: 2048M
           force-avd-creation: false
-          emulator-options: -snapshot snap_2025-08-27_10-53-29 -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          # Load our renamed snapshot explicitly and don't save back over it
+          emulator-options: -snapshot default_boot -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -no-metrics
           disable-animations: true
           script: |
             /bin/bash -c "
               set -euo pipefail
+              adb start-server
+              adb wait-for-device
+              echo 'Waiting for sys.boot_completed...'
+              adb shell 'while [[ \"\$(getprop sys.boot_completed)\" != \"1\" ]]; do sleep 1; done;'
+              echo 'Device booted.'
+
               npm install -g appium@2.6.0
               appium driver list --installed
               appium --relaxed-security &
               sleep 10
-              adb wait-for-device
-              adb shell 'while [[ -z \$(getprop sys.boot_completed) ]]; do sleep 1; done;'
+
               adb devices >> emulator_logcat.txt
               adb install app.apk
+
               mkdir -p screenshots logs
               adb shell dumpsys account > account_dump.txt || true
+
               npx wdio run wdio.conf.ts | tee wdio_output.txt &
               PID=\$!
               INTERVAL=5
@@ -127,6 +147,7 @@ jobs:
                 echo \"Tests failed with code \$EXIT_CODE\"
                 exit \$EXIT_CODE
               fi
+
               adb shell screencap /sdcard/snapshot.png || true
               adb pull /sdcard/snapshot.png ./snapshot.png || true
               adb logcat -d >> emulator_logcat.txt || true
