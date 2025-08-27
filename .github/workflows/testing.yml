@@ -3,10 +3,10 @@ name: Appium Emulator Bootstrap (API 35 ARM64 + Snapshot)
 on:
   push:
   workflow_dispatch:
-  
+
 jobs:
   bootstrap:
-    runs-on: ubuntu-latest
+    runs-on: macos-14
     timeout-minutes: 45
 
     env:
@@ -16,34 +16,26 @@ jobs:
       API_LEVEL: "35"
       TARGET: "google_apis"
       ARCH: "arm64-v8a"
-      SNAP_URL: 'https://emulatorsnapshots.s3.ap-south-1.amazonaws.com/snap_boot.zip?response-content-disposition=inline&X-Amz-Content-Sha256=UNSIGNED-PAYLOAD&X-Amz-Security-Token=IQoJb3JpZ2luX2VjEDUaCmFwLXNvdXRoLTEiRzBFAiEAgfHhrq4R2HVxVK8UMLinehOTnNQob7TN7hQw8jDzMlUCIEDs%2F37zuFNEdONJ3O%2Fgn4w9k49y%2BeRYwJfLXfcugZr%2FKsIDCI7%2F%2F%2F%2F%2F%2F%2F%2F%2F%2FwEQAxoMNDU4MzkxNzY3MTIxIgyoZ3GpLqWgvt1oScEqlgNgUJekuWBE52jomhmu81Sge7mHdR26b3ZVjVTEzeep4W%2F0j%2FLKO%2BR9tMrFOR2e9xwHh%2BgJfCHTSXayF1p7DMwbQcGap5oYHgkQXVd1d%2BYN%2BqGOSdsS3XGEYpIGY2ilpQySDE2e7Zh1gCVsA4080n0bqCfK%2FPkOm4dazOvlDehKPYrB77lDT%2BI23fWUAhJNlXolnFcITfj4apxoIY3BZwnIYR7jRtmxC9ZtWHoDcuvDlzQwhvUHrzs%2B0%2FWIoa0BhJZkcHByfg0gP3uDqXhKwBPoq7bFoaVV6aycOtbXONX1tObbvbWHXK13T4Gelz0BdZLWQdj5Yij6QI0WE0v532Tep5UlfGWVBWgt3JdTr58ScZ7%2FdXkzk%2Bwr%2BvsIysEYuuiFbcN3YepoguwH6a2jCnYIHGLYkUIufyV3CFRZaP1F873hYNQPpd%2FOizhjoLl0cXnF%2BD5CYq1LbKg5Hdf5o6iCqfArFw%2F60tMgQZbDOGNzY4p1jwkZH7OkFuZVmfjuwjYf3K50sxKBwQm2tAFXcut%2Fsj%2FHi9YVMK2dusUGOt4CWUrNHQFI%2BYBW5mTOCuoUn3XkyyvgUIrF%2FFB4Pvh%2BrPMsmHpCcAR51uw4xYjmSy5el%2FLezQ94%2Fls7JQO2GEzFtRy9zSAXvn7ZESVIc8g1nAthHpX%2Bk3VnhTJyz689ADQqojxxSMU4DSPopMcD2hhBFfHcwMVF1sXx%2FkHL9B6L9JBS1GZNa1QWuGklEwnbD0gk8Mjp1b17x8j7PhG9lwVPQ7CpVp8KTxXAbwPmdvfw7S3dNQXmQd%2BCBdi%2Fe2eiiMAwHWD7trxfOh%2BxeSORmAdQckW3MfWk%2FGT3wlCoWmROSo1cMov7Kx28LV4aAl8%2FJBEpfASJ%2B%2FJD%2BvEjCpatta1Yp%2F6XjWENbUZXR1N0cWP7u83hbXuLKpMroJYufaW4W3p%2BlW54vxjn54PCi4UZV1S5UhPuD81HmTj6Lnk%2FJXqR4iNYHWsif3P40L%2FmaZDXLYiJf4WKlFO2a8nlvH9BpY4%3D&X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=ASIAWVOSHJBI5UUX3T6L%2F20250827%2Fap-south-1%2Fs3%2Faws4_request&X-Amz-Date=20250827T123608Z&X-Amz-Expires=36000&X-Amz-SignedHeaders=host&X-Amz-Signature=a4942bf8d60d4b680337666af7959519e412ea7adcd597d6545cbabcb5168acd'
+      SNAP_URL: "https://emulatorsnapshots.s3.ap-south-1.amazonaws.com/snap_boot.zip?response-content-disposition=inline&X-Amz-Content-Sha256=UNSIGNED-PAYLOAD&X-Amz-Security-Token=IQoJb3JpZ2luX2VjEDUaCmFwLXNvdXRoLTEiRzBFAiEAgfHhrq4R2HVxVK8UMLinehOTnNQob7TN7hQw8jDzMlUCIEDs%2F37zuFNEdONJ3O%2Fgn4w9k49y%2BeRYwJfLXfcugZr%2FKsIDCI7%2F%2F%2F%2F%2F%2F%2F%2F%2F%2FwEQAxoMNDU4MzkxNzY3MTIxIgyoZ3GpLqWgvt1oScEqlgNgUJekuWBE52jomhmu81Sge7mHdR26b3ZVjVTEzeep4W%2F0j%2FLKO%2BR9tMrFOR2e9xwHh%2BgJfCHTSXayF1p7DMwbQcGap5oYHgkQXVd1d%2BYN%2BqGOSdsS3XGEYpIGY2ilpQySDE2e7Zh1gCVsA4080n0bqCfK%2FPkOm4dazOvlDehKPYrB77lDT%2BI23fWUAhJNlXolnFcITfj4apxoIY3BZwnIYR7jRtmxC9ZtWHoDcuvDlzQwhvUHrzs%2B0%2FWIoa0BhJZkcHByfg0gP3uDqXhKwBPoq7bFoaVV6aycOtbXONX1tObbvbWHXK13T4Gelz0BdZLWQdj5Yij6QI0WE0v532Tep5UlfGWVBWgt3JdTr58ScZ7%2FdXkzk%2Bwr%2BvsIysEYuuiFbcN3YepoguwH6a2jCnYIHGLYkUIufyV3CFRZaP1F873hYNQPpd%2FOizhjoLl0cXnF%2BD5CYq1LbKg5Hdf5o6iCqfArFw%2F60tMgQZbDOGNzY4p1jwkZH7OkFuZVmfjuwjYf3K50sxKBwQm2tAFXcut%2Fsj%2FHi9YVMK2dusUGOt4CWUrNHQFI%2BYBW5mTOCuoUn3XkyyvgUIrF%2FFB4Pvh%2BrPMsmHpCcAR51uw4xYjmSy5el%2FLezQ94%2Fls7JQO2GEzFtRy9zSAXvn7ZESVIc8g1nAthHpX%2Bk3VnhTJyz689ADQqojxxSMU4DSPopMcD2hhBFfHcwMVF1sXx%2FkHL9B6L9JBS1GZNa1QWuGklEwnbD0gk8Mjp1b17x8j7PhG9lwVPQ7CpVp8KTxXAbwPmdvfw7S3dNQXmQd%2BCBdi%2Fe2eiiMAwHWD7trxfOh%2BxeSORmAdQckW3MfWk%2FGT3wlCoWmROSo1cMov7Kx28LV4aAl8%2FJBEpfASJ%2B%2FJD%2BvEjCpatta1Yp%2F6XjWENbUZXR1N0cWP7u83hbXuLKpMroJYufaW4W3p%2BlW54vxjn54PCi4UZV1S5UhPuD81HmTj6Lnk%2FJXqR4iNYHWsif3P40L%2FmaZDXLYiJf4WKlFO2a8nlvH9BpY4%3D&X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=ASIAWVOSHJBI5UUX3T6L%2F20250827%2Fap-south-1%2Fs3%2Faws4_request&X-Amz-Date=20250827T123608Z&X-Amz-Expires=36000&X-Amz-SignedHeaders=host&X-Amz-Signature=a4942bf8d60d4b680337666af7959519e412ea7adcd597d6545cbabcb5168acd"
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Set up Java ${{ env.JAVA_VERSION }}
+      - name: Set up Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: ${{ env.JAVA_VERSION }}
 
-      - name: Set up Node.js ${{ env.NODE_VERSION }}
+      - name: Set up Node ${{ env.NODE_VERSION }}
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
 
-      - name: Install Node deps (for TS/Appium)
+      - name: Install Node deps
         run: |
           if [ -f package-lock.json ]; then npm ci; else npm i; fi
-
-      # Recommended by emulator-runner for hardware acceleration on ubuntu-latest
-      - name: Enable KVM group perms
-        run: |
-          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
-          sudo udevadm control --reload-rules
-          sudo udevadm trigger --name-match=kvm
 
       - name: Create snapshot prep script
         shell: bash
@@ -60,7 +52,6 @@ jobs:
           echo "Unzipping snapshot..."
           unzip -o "$TMPDIR/snap.zip" -d "$TMPDIR/unzipped" >/dev/null
           mkdir -p "$AVD_DIR/snapshots/default_boot"
-          # Try common layouts and copy accordingly
           if [ -d "$TMPDIR/unzipped/snapshots" ]; then
             cp -a "$TMPDIR/unzipped/snapshots/." "$AVD_DIR/snapshots/"
           elif [ -d "$TMPDIR/unzipped/default_boot" ]; then
@@ -68,25 +59,22 @@ jobs:
           else
             cp -a "$TMPDIR/unzipped/." "$AVD_DIR/snapshots/default_boot/"
           fi
-          # Ensure Quick Boot will be used
           grep -q "^fastboot.forceChosenSnapshotBoot=" "$AVD_DIR/config.ini" || echo "fastboot.forceChosenSnapshotBoot=yes" >> "$AVD_DIR/config.ini"
           grep -q "^fastboot.chosenSnapshotFile=" "$AVD_DIR/config.ini" || echo "fastboot.chosenSnapshotFile=snapshots/default_boot" >> "$AVD_DIR/config.ini"
           ls -la "$AVD_DIR/snapshots" || true
           EOS
           chmod +x .github/scripts/prepare-avd-snapshot.sh
 
-      - name: Boot emulator using API 35 ARM64 AVD + injected snapshot
+      - name: Boot emulator (API 35 / arm64-v8a) using snapshot
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: ${{ env.API_LEVEL }}
           target: ${{ env.TARGET }}
           arch: ${{ env.ARCH }}
           avd-name: ${{ env.AVD_NAME }}
-          # Important: do NOT pass -no-snapshot so Quick Boot snapshot loads
-          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
+          emulator-options: -no-window -noaudio -no-boot-anim
           disable-animations: true
           pre-emulator-launch-script: .github/scripts/prepare-avd-snapshot.sh
-          # Sanity check: show ABI & SDK from the booted device
           script: |
             adb devices
             adb shell getprop ro.product.cpu.abi
