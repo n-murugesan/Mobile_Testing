@@ -50,9 +50,11 @@ jobs:
             set -euo pipefail
             curl -L -o snap_boot.zip 'https://emulatorsnapshots.s3.ap-south-1.amazonaws.com/snap_boot.zip?response-content-disposition=inline&X-Amz-Content-Sha256=UNSIGNED-PAYLOAD&X-Amz-Security-Token=IQoJb3JpZ2luX2VjEDAaCmFwLXNvdXRoLTEiSDBGAiEA3ikuld9xQtYcps2K7A5IFMXD2tmPyVUTrZY2FVypqwgCIQC72vY0DOIFmKmA5CzqY%2Brfopp8hrXanKRhy5ZzXRXcjSrCAwiJ%2F%2F%2F%2F%2F%2F%2F%2F%2F%2F8BEAMaDDQ1ODM5MTc2NzEyMSIMnQ9SGVebMfJmmE6MKpYD0L3z%2FM6IuBMpiNi9OVUnHObgUiHqYtCrxp%2B9tGKsvUvCVNDoWichdoMg2E6s2wbQcDEIeNX531y2hzxoFJu32Bu7SreXslFCe%2FNBPPr1eCZ5LSGIXH22%2BN7ETvTcHo6zbRXJ%2FWUjlFoz1sE2mSjYofmcERnLEas%2FyRn6OXzxSfripjKhIOooBeFQHPp6q9ZSokgZLLryRyezjhi%2FaFVKQWmCKcYM03RBu3Guiu1kaYMBmcuCAll8PL5Re0bRc2G5me%2F9F3kYbQEGjQI5vgbUukSMSbO5eC4RA9Dg%2BlCUcJz4c1je2pOXX62L7SUnvLHoUwNJWUI%2BpD7bBG7BrbHMdCeeXFIDzZHEZl0LaOBy5vvDC4YJSIqKhsysbq2eAiPuUa37CfNCiR2mYaqosXXKKTEj4nRhknhoHSzaOpBqVsXf%2BvvjTNRSWenvqGVyDEO%2BtJQiULJZbkeewBbLhg1FR76UiG9%2F5uD%2FdVeaAYlOtz2KR9N7yQDJ88tNyv%2Fe73BmxyC8l2nzPcEzOojbY%2BfS5%2BS1l2Q%2BODCtnbrFBjrdApPst2wklrDNLw6Y%2FVx81WY1ZhZSEZ1snA2Ra2ex1Mun5rOAJeaVwe5rAmNh4jIPKR27rx6SyXT0R36v7pSeZhMGRWyi0zskMTmt70jFciYquxTCCGZlZcVdIG%2BJORET4TBmlnt26JMaX6UFv40y1ZmiwysQa%2BzpTiQhXFdu0gG3Qsq0nI%2FVdqTkXiq72rnpSlSea9JNSQ%2BMug5CASDOPRYxUMbjS1cvUlcDDPQU5GVLf7qTSpd82jSZVJaGvmhhU5lnt%2Fv6uNGXUNrSbqp6oJ1eHSEC5YzrzbHouSid7vVX4noosKUoS1P%2FM9xNrvZnlKpCDkHoUK5T2Nvtduqe9CJS02tTEgRs9WJDFlLFyWBEfsCNtLFOE8xVYWTuBQDpbl3gNfRSlgOsZu4OKy9msfnDA3UGhIno0idgzpuV4mpvrCAlZ5Xqagwc3ZKIhgoh2N9DI%2BiuBerovmxl4Dk%3D&X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=ASIAWVOSHJBITGDOAVNO%2F20250827%2Fap-south-1%2Fs3%2Faws4_request&X-Amz-Date=20250827T073933Z&X-Amz-Expires=36000&X-Amz-SignedHeaders=host&X-Amz-Signature=9bfb9214c1fee9e1398fc9ca7bc1185de0d5b45bfbc45bf3b7eb561fac1d4c0b'
             mkdir -p ~/.android/avd/test_avd.avd/snapshots
-            unzip snap_boot.zip -d ~/.android/avd/test_avd.avd/snapshots
+            unzip -q snap_boot.zip -d ~/.android/avd/test_avd.avd/snapshots
+            rm -rf ~/.android/avd/test_avd.avd/snapshots/__MACOSX
             echo 'Snapshot extracted.'
-            ls -l ~/.android/avd/test_avd.avd/snapshots/snap_boot || echo 'Snapshot directory listing failed.'
+            ls -l ~/.android/avd/test_avd.avd/snapshots/snap_2025-08-27_10-53-29 || echo 'Snapshot directory listing failed.'
+            chmod -R u+rw ~/.android/avd/test_avd.avd/snapshots/snap_2025-08-27_10-53-29 || echo 'Failed to set snapshot permissions.'
           "
 
       - name: Debug SDK Packages (if cache miss)
@@ -88,7 +90,7 @@ jobs:
           ram-size: 2048M
           disk-size: 2048M
           force-avd-creation: false
-          emulator-options: -snapshot snap_boot -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          emulator-options: -snapshot snap_2025-08-27_10-53-29 -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           disable-animations: true
           script: |
             /bin/bash -c "
@@ -123,8 +125,8 @@ jobs:
                 echo \"Tests failed with code \$EXIT_CODE\"
                 exit \$EXIT_CODE
               fi
-              adb shell screencap /sdcard/screenshot.png || true
-              adb pull /sdcard/screenshot.png ./screenshot.png || true
+              adb shell screencap /sdcard/snapshot.png || true
+              adb pull /sdcard/snapshot.png ./snapshot.png || true
               adb logcat -d >> emulator_logcat.txt || true
               adb -s emulator-5554 emu kill || true
             "
@@ -138,6 +140,6 @@ jobs:
             allure-results/
             emulator_logcat.txt
             wdio_output.txt
-            screenshot.png
+            snapshot.png
             screenshots/
             logs/
