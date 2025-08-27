@@ -8,15 +8,12 @@ jobs:
   emulator:
     runs-on: ubuntu-latest
     timeout-minutes: 45
-
     env:
-      NODE_VERSION: "22.16.0"
-      JAVA_VERSION: "17"
-      AVD_NAME: "api35-x86_64-play"
+      AVD_NAME: api35-x86_64-play
       API_LEVEL: "35"
-      TARGET: "google_apis_playstore"   # Google Play image supports device-level sign-in
-      ARCH: "x86_64"
-      SNAP_URL: "https://emulatorsnapshots.s3.ap-south-1.amazonaws.com/default_boot.zip?response-content-disposition=inline&X-Amz-Content-Sha256=UNSIGNED-PAYLOAD&X-Amz-Security-Token=IQoJb3JpZ2luX2VjEDcaCmFwLXNvdXRoLTEiSDBGAiEA1n4oUposOSWzV%2FDti3tY1nmVKNKuf4nCMLloNkz4VhQCIQCjeGd7SoSOoWK4Eivtz50MAbamyYo15SE0Q2sJ7b1GLCrCAwiQ%2F%2F%2F%2F%2F%2F%2F%2F%2F%2F8BEAMaDDQ1ODM5MTc2NzEyMSIMu6m0JkF5R4fLdSHlKpYDWmxRn39g2VVRzpQG9p4rbNblsaqoqukd8SfxTwZpiCvb9LmlxZApVaNP87obLb5UhQ%2FuCzm7QuJRFHS4jwj8eAa%2BQMMYGdqHNcubE692aeKY5vz3dNN8wl9C2KiGen9KIkHOGF%2BKsJvLJrH4lxj2fTbXV5Dgg%2BkxoUEjG7mIRBFHM4jSVRMW9N3D8Q%2Fr41jMSXu1V%2FNdTL819cDeIiyPFuew9b8Jqn67n9z%2B84uVLmALZ2TQd5pBcyt%2BKdYzpm92y0IulTweMGRN%2F1NiKqYGRRiDn%2BRIuVjI4%2BQ6TcEraO73DwD4QpKVWw7yeK%2BSMU2IKXBh1zx170W67ZQoCIwGE72XXQjCC2tyUXUW9dhZBu3bDlmC%2FywyCqJIkgFrjMIvj4nQoVlOIOu%2F%2BkrQ0XYFXUAqh%2B7Qh7vGlY1vTi%2BvApDcEmNbs0szcYwIhUO%2FOXZ%2FO9Nf4WwjWOPrGASRMobvSuKNHiIQIwiwaatlAOjuTr1cR%2BHwCPLfwHVu2ue%2FCPiiG%2BOPm8iLC9ee54pjaNJtOZAu8ZnxDDypbzFBjrdAlZCu164AQfgUpqHTKPrMN%2F7qms7p86LyjLyLZueEFgZwq%2BzYXO%2F3845bGJJIZu7PSnAUqVYBj8FBHNpyB8qjMsRj%2Bxb2jyRkyZ7sT13E6Rsqf27n7wgksrwjWMOmaPaNmj17vauGdmTRoJ3H9oHazBZmgO%2BSmwmp9S8KA%2B9UbU855icmQmKGtCNnL4njxPR77i7ilBlG1nQL4r1H7ixgEmcCHA0MjDG%2FFFkA6VTd3VmSYttFxckBPnC7RG0KDzqdjWBAa%2FxdtDN5G5NkGagM7ezNv80mhxZhyo0vb4sYo5xLZaTUWGxoG2Zkw7VyXTzwyQweNm%2BKYeJYAB9mWHOxROhi9rgXiSw5n6wkhTaOQnpxblk5SDAIph7DSr7NObyoSywp19JGcO7SK3pXslwvCee%2Fs0K5JhQadQ28a9YV%2Fs%2FjDbyNUYW78zwCfxnU3yJBUZaCBo0lGidbfbg%2FBM%3D&X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=ASIAWVOSHJBI3MYHATO5%2F20250827%2Fap-south-1%2Fs3%2Faws4_request&X-Amz-Date=20250827T143857Z&X-Amz-Expires=18000&X-Amz-SignedHeaders=host&X-Amz-Signature=dac3fe10094f3f7470110d31108cdaecebbe714119d7d45cbf3496ff9a87d1d0"
+      TARGET: google_apis_playstore
+      ARCH: x86_64
+      SNAP_URL: "<YOUR_DEFAULT_BOOT_ZIP_PRESIGNED_URL>"
 
     steps:
       - uses: actions/checkout@v4
@@ -25,57 +22,60 @@ jobs:
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: ${{ env.JAVA_VERSION }}
+          java-version: "17"
 
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
-          node-version: ${{ env.NODE_VERSION }}
+          node-version: "22.16.0"
           cache: npm
 
       - name: Install Node deps
         run: |
           if [ -f package-lock.json ]; then npm ci; else npm i; fi
 
-      # Enable KVM (hardware accel) on Ubuntu per emulator-runner guidance
+      # Required for hardware accel on ubuntu-latest (per emulator-runner docs)
       - name: Enable KVM group perms
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
 
-      - name: Create snapshot prep script
+      - name: Write pre-launch snapshot injector
         shell: bash
         run: |
           mkdir -p .github/scripts
           cat > .github/scripts/inject-snapshot.sh << 'EOS'
           set -euxo pipefail
+          echo "[INJECT] starting pre-emulator-launch hook"
           AVD_NAME="${AVD_NAME:-api35-x86_64-play}"
           AVD_DIR="$HOME/.android/avd/${AVD_NAME}.avd"
           TMPDIR="$(mktemp -d)"
-          echo "Downloading snapshot zip..."
+          echo "[INJECT] SNAP_URL=${SNAP_URL}"
+          echo "[INJECT] download to $TMPDIR/snap.zip"
           curl -L --fail --retry 5 --retry-all-errors -o "$TMPDIR/snap.zip" "$SNAP_URL"
-          echo "Unzipping..."
+          echo "[INJECT] unzip..."
           unzip -o "$TMPDIR/snap.zip" -d "$TMPDIR/unzipped" >/dev/null
 
-          # Wait for AVD dir to exist (action creates it right before launch)
-          echo "Waiting for AVD dir: $AVD_DIR"
-          for i in {1..60}; do
-            [ -d "$AVD_DIR" ] && break
-            sleep 1
-          done
-          [ -d "$AVD_DIR" ] || { echo "AVD dir not found"; exit 1; }
+          # Wait for AVD dir to be created by the action (defensive against race)
+          echo "[INJECT] waiting for AVD dir: $AVD_DIR"
+          for i in {1..60}; do [ -d "$AVD_DIR" ] && break || sleep 1; done
+          [ -d "$AVD_DIR" ] || { echo "[INJECT] ERROR: AVD dir not found"; exit 1; }
 
           mkdir -p "$AVD_DIR/snapshots/default_boot"
+
+          # Accept common layouts in your zip
           if [ -d "$TMPDIR/unzipped/snapshots" ]; then
+            echo "[INJECT] copying snapshots/* -> $AVD_DIR/snapshots/"
             cp -a "$TMPDIR/unzipped/snapshots/." "$AVD_DIR/snapshots/"
           elif [ -d "$TMPDIR/unzipped/default_boot" ]; then
+            echo "[INJECT] copying default_boot/* -> $AVD_DIR/snapshots/default_boot/"
             cp -a "$TMPDIR/unzipped/default_boot/." "$AVD_DIR/snapshots/default_boot/"
           else
+            echo "[INJECT] copying all -> $AVD_DIR/snapshots/default_boot/"
             cp -a "$TMPDIR/unzipped/." "$AVD_DIR/snapshots/default_boot/"
           fi
 
-          # Ensure Quick Boot snapshot is chosen
           CONFIG="$AVD_DIR/config.ini"
           touch "$CONFIG"
           grep -q "^fastboot.forceChosenSnapshotBoot=" "$CONFIG" || echo "fastboot.forceChosenSnapshotBoot=yes" >> "$CONFIG"
@@ -85,23 +85,28 @@ jobs:
             echo "fastboot.chosenSnapshotFile=snapshots/default_boot" >> "$CONFIG"
           fi
 
-          echo "Snapshot layout:"
-          ls -la "$AVD_DIR/snapshots" || true
+          echo "[INJECT] config.ini tail:"
+          tail -n +1 "$CONFIG" | sed -n '$p'
+          echo "[INJECT] snapshots tree:"
+          ls -R "$AVD_DIR/snapshots" || true
+          echo "[INJECT] done"
           EOS
           chmod +x .github/scripts/inject-snapshot.sh
 
-      - name: Boot emulator (API 35 / Google Play / x86_64) with snapshot
+      - name: Boot emulator (API 35 / Google Play / x86_64) using your snapshot
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: ${{ env.API_LEVEL }}
           target: ${{ env.TARGET }}
           arch: ${{ env.ARCH }}
           avd-name: ${{ env.AVD_NAME }}
-          # IMPORTANT: don't include -no-snapshot so it can Quick Boot from our snapshot
+          # override defaults to ALLOW snapshot loading (default has -no-snapshot)
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
           disable-animations: true
-          pre-emulator-launch-script: .github/scripts/inject-snapshot.sh
+          # ✅ THIS IS THE KEY — you should see "Run pre emulator launch script" in logs
+          pre-emulator-launch-script: bash -x .github/scripts/inject-snapshot.sh
           script: |
             adb devices
             adb shell getprop ro.product.cpu.abi
             adb shell getprop ro.build.version.sdk
+
