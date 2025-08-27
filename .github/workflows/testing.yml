@@ -1,6 +1,5 @@
-name: Appium Tests with Emulator
+name: Appium Tests (GitHub Actions with Emulator)
 
-# Triggers for the workflow
 on:
   push:
   workflow_dispatch:
@@ -8,62 +7,61 @@ on:
 jobs:
   appium-emulator-test:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60  # Increased for large snapshot download
 
     steps:
-      # Check out the repository code
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      # Set up Node.js environment
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '22.16.0'
 
-      # Verify Node.js and npm versions
       - name: Verify Node.js Version
         run: |
           node -v
           npm -v
 
-      # Install project dependencies
       - name: Install NPM Dependencies
         run: npm ci
 
-      # Enable KVM for hardware acceleration
-      - name: Enable KVM
+      - name: Install Zip Tools
+        run: sudo apt install unzip -y
+
+      - name: Enable KVM for Hardware Acceleration
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
 
-      # Cache AVD snapshot to speed up future runs
-      - name: Cache AVD Snapshot
-        id: avd-cache
+      - name: Cache AVD Config
         uses: actions/cache@v4
+        id: avd-cache
         with:
           path: |
             ~/.android/avd/*
             ~/.android/adb*
-          key: avd-35
+          key: avd-35-config
 
-      # Debug SDK packages if cache miss
-      - name: Debug SDK Packages
+      - name: Download and Extract Snapshot
+        run: |
+          /bin/bash -c "
+            set -euo pipefail
+            curl -L -o snap_boot.zip 'https://emulatorsnapshots.s3.ap-south-1.amazonaws.com/snap_boot.zip?response-content-disposition=inline&X-Amz-Content-Sha256=UNSIGNED-PAYLOAD&X-Amz-Security-Token=IQoJb3JpZ2luX2VjEDAaCmFwLXNvdXRoLTEiSDBGAiEA3ikuld9xQtYcps2K7A5IFMXD2tmPyVUTrZY2FVypqwgCIQC72vY0DOIFmKmA5CzqY%2Brfopp8hrXanKRhy5ZzXRXcjSrCAwiJ%2F%2F%2F%2F%2F%2F%2F%2F%2F%2F8BEAMaDDQ1ODM5MTc2NzEyMSIMnQ9SGVebMfJmmE6MKpYD0L3z%2FM6IuBMpiNi9OVUnHObgUiHqYtCrxp%2B9tGKsvUvCVNDoWichdoMg2E6s2wbQcDEIeNX531y2hzxoFJu32Bu7SreXslFCe%2FNBPPr1eCZ5LSGIXH22%2BN7ETvTcHo6zbRXJ%2FWUjlFoz1sE2mSjYofmcERnLEas%2FyRn6OXzxSfripjKhIOooBeFQHPp6q9ZSokgZLLryRyezjhi%2FaFVKQWmCKcYM03RBu3Guiu1kaYMBmcuCAll8PL5Re0bRc2G5me%2F9F3kYbQEGjQI5vgbUukSMSbO5eC4RA9Dg%2BlCUcJz4c1je2pOXX62L7SUnvLHoUwNJWUI%2BpD7bBG7BrbHMdCeeXFIDzZHEZl0LaOBy5vvDC4YJSIqKhsysbq2eAiPuUa37CfNCiR2mYaqosXXKKTEj4nRhknhoHSzaOpBqVsXf%2BvvjTNRSWenvqGVyDEO%2BtJQiULJZbkeewBbLhg1FR76UiG9%2F5uD%2FdVeaAYlOtz2KR9N7yQDJ88tNyv%2Fe73BmxyC8l2nzPcEzOojbY%2BfS5%2BS1l2Q%2BODCtnbrFBjrdApPst2wklrDNLw6Y%2FVx81WY1ZhZSEZ1snA2Ra2ex1Mun5rOAJeaVwe5rAmNh4jIPKR27rx6SyXT0R36v7pSeZhMGRWyi0zskMTmt70jFciYquxTCCGZlZcVdIG%2BJORET4TBmlnt26JMaX6UFv40y1ZmiwysQa%2BzpTiQhXFdu0gG3Qsq0nI%2FVdqTkXiq72rnpSlSea9JNSQ%2BMug5CASDOPRYxUMbjS1cvUlcDDPQU5GVLf7qTSpd82jSZVJaGvmhhU5lnt%2Fv6uNGXUNrSbqp6oJ1eHSEC5YzrzbHouSid7vVX4noosKUoS1P%2FM9xNrvZnlKpCDkHoUK5T2Nvtduqe9CJS02tTEgRs9WJDFlLFyWBEfsCNtLFOE8xVYWTuBQDpbl3gNfRSlgOsZu4OKy9msfnDA3UGhIno0idgzpuV4mpvrCAlZ5Xqagwc3ZKIhgoh2N9DI%2BiuBerovmxl4Dk%3D&X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=ASIAWVOSHJBITGDOAVNO%2F20250827%2Fap-south-1%2Fs3%2Faws4_request&X-Amz-Date=20250827T073933Z&X-Amz-Expires=36000&X-Amz-SignedHeaders=host&X-Amz-Signature=9bfb9214c1fee9e1398fc9ca7bc1185de0d5b45bfbc45bf3b7eb561fac1d4c0b'
+            mkdir -p ~/.android/avd/test_avd.avd/snapshots
+            unzip snap_boot.zip -d ~/.android/avd/test_avd.avd/snapshots
+            echo 'Snapshot extracted.'
+            ls -l ~/.android/avd/test_avd.avd/snapshots/snap_boot || echo 'Snapshot directory listing failed.'
+          "
+
+      - name: Debug SDK Packages (if cache miss)
         if: steps.avd-cache.outputs.cache-hit != 'true'
         run: |
           sdkmanager --list | grep system-images || true
         continue-on-error: true
 
-      # Download and extract AVD snapshot
-      - name: Download and Extract Snapshot
-        run: |
-          curl -L -o snap_2025-08-27_10-53-29.zip "https://emulatorsnapshots.s3.ap-south-1.amazonaws.com/snap_2025-08-27_10-53-29.zip?response-content-disposition=inline&X-Amz-Content-Sha256=UNSIGNED-PAYLOAD&X-Amz-Security-Token=IQoJb3JpZ2luX2VjEC8aCmFwLXNvdXRoLTEiRjBEAiAqGa0SoWStWTXMwdTaJeZg6bBcb8Vz54skiLy8DusOSgIgNBAVUa%2FeigoxM6eODKQMgvqlUlb1lLvzjefUIFKJiA4qwgMIiP%2F%2F%2F%2F%2F%2F%2F%2F%2F%2FARADGgw0NTgzOTE3NjcxMjEiDGl%2BCkzcWiWe3WxlkSqWA6%2Fahpw73uHQJw2th0w7TPF%2Bew5xr3FZHYHzO0cTIuwEEip%2F5GQHec7CmPpQTuu%2FwKewXzRmUjAInMj8ctbO1Us%2FVgm9q16F9M0HjGPYiE5uZHRWNNC7ImMX4PiWX2%2BLBcpSchGPO2MNUVts648gJg%2BH%2BRUzD3n0D14wrkn%2BqM%2B5eoGo1lmg6xS%2By2xzeM%2BH6nnD3o1d10o%2Bg6pqb8uXsned7RBs3wzkm1vGc3zkb6UbwroED9a5LodWb00nnzb%2BafK1h0MVihlI6TLluoqAqIx8dmwry%2FOlG4kSiqKQxBi3CYDbZQKwz2%2FaF7YYlqlyQ98L8Kln90294l7sDwuZhux93gxlizg8dyR8yvrLh1nFQC6Y%2Bw6o9jnzwYN1j%2Fk%2FMzU0SADRMVcmRqjGCdgWhEuoUFAUQX6yaKlJg9z42bkV%2FCWNl2WH6FtzexS8qXgPyTuwRF98aQGjXhDHbOLPKxf80rc9qJX3O7LVzQGPO1K8AD6PQ2%2BmsY7KtmlDItIps9OkvffftW4u5WNlBtbg8h3PulyRa3AwrZ26xQY63wICMIimWVaWvNikAe6DKCBuknpmycQliDVNGKZ1bAyQZPG1on38waEg3gbf9jsg0WUMU2M9ZNHO2nTlFhdkAyc1gcVV8dXQTdBDXAvCNoaZChgfg0BP%2FFZ1jf1d%2BgLEPJsT63Hfbx40LEZLexarAtHLjkxzTr2RBcyX6UQs4fZ8fbG50hU0FRlVB1OqpNJD3WCHg6ncN5YLUyW2QJAr4TtArliaoLKzNOZS2g%2Fk6lPCyL5%2FSxeqo0lCD1ssc2Ofpi7psO62bf1SAfNS5nDdKzwGhmuuGWks1unGxl20gvKTnTiobxT6CcPyua84z1aA40Wz80U2XZ%2BP6ikhwwodmbEuly0y0Tj%2B7h1SrX1s7ha4gHiQOdXJft5KrLxEW5479tSEfb8K0WYVfVL6Qh4AnxVncJ84S2c8vAWgv%2Bp53y7pwwLr5WCg7dl9Gfukw9Y8sg78OW6xRc0LZMTBtBGMZ1k%3D&X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=ASIAWVOSHJBI7T435BGM%2F20250827%2Fap-south-1%2Fs3%2Faws4_request&X-Amz-Date=20250827T070259Z&X-Amz-Expires=36000&X-Amz-SignedHeaders=host&X-Amz-Signature=9eb32f0ee48d19bf4d9c5e4746428fef1f79bfb5d504162e883ac51af33ca987"
-          mkdir -p ~/.android/avd/test_avd.avd/snapshots
-          unzip snap_2025-08-27_10-53-29.zip -d ~/.android/avd/test_avd.avd/snapshots
-
-      # Create AVD snapshot if not cached
-      - name: Create AVD Snapshot
+      - name: Create AVD (if not cached)
         if: steps.avd-cache.outputs.cache-hit != 'true'
         uses: reactivecircus/android-emulator-runner@v2
         with:
@@ -76,10 +74,9 @@ jobs:
           force-avd-creation: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           disable-animations: true
-          script: echo "Generated AVD snapshot for caching."
+          script: echo "Generated AVD config for caching."
 
-      # Run Appium tests on emulator
-      - name: Run Appium Tests
+      - name: Run Appium Tests on Emulator
         uses: reactivecircus/android-emulator-runner@v2
         env:
           ANDROID_EMULATOR_WAIT_TIME_BEFORE_KILL: 90
@@ -91,22 +88,47 @@ jobs:
           ram-size: 2048M
           disk-size: 2048M
           force-avd-creation: false
-          emulator-options: -snapshot snap_2025-08-27_10-53-29 -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          emulator-options: -snapshot snap_boot -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           disable-animations: true
           script: |
-            set -e
-            npm install -g appium@2.6.0
-            appium driver list --installed
-            appium --relaxed-security &
-            sleep 10
-            adb wait-for-device
-            adb shell 'while [[ -z $(getprop sys.boot_completed) ]]; do sleep 1; done;'
-            adb devices >> emulator_logcat.txt
-            adb install app.apk
-            npx wdio run wdio.conf.ts | tee wdio_output.txt
-            adb logcat -d >> emulator_logcat.txt || true
+            /bin/bash -c "
+              set -euo pipefail
+              npm install -g appium@2.6.0
+              appium driver list --installed
+              appium --relaxed-security &
+              sleep 10
+              adb wait-for-device
+              adb shell 'while [[ -z \$(getprop sys.boot_completed) ]]; do sleep 1; done;'
+              adb devices >> emulator_logcat.txt
+              adb install app.apk
+              mkdir -p screenshots logs
+              npx wdio run wdio.conf.ts | tee wdio_output.txt &
+              PID=\$!
+              INTERVAL=5
+              MAX_MIN=35
+              ELAPSED=0
+              while kill -0 \$PID 2>/dev/null; do
+                sleep \${INTERVAL}m
+                ELAPSED=\$((ELAPSED + INTERVAL))
+                echo \"Test Elapsed: \${ELAPSED} minutes - Still running...\"
+                if [ \$ELAPSED -ge \$MAX_MIN ]; then
+                  echo \"Timeout: Failing after \${MAX_MIN} minutes.\"
+                  kill -9 \$PID
+                  exit 1
+                fi
+              done
+              wait \$PID
+              EXIT_CODE=\$?
+              if [ \$EXIT_CODE -ne 0 ]; then
+                echo \"Tests failed with code \$EXIT_CODE\"
+                exit \$EXIT_CODE
+              fi
+              adb shell screencap /sdcard/screenshot.png || true
+              adb pull /sdcard/screenshot.png ./screenshot.png || true
+              adb logcat -d >> emulator_logcat.txt || true
+              adb -s emulator-5554 emu kill || true
+            "
 
-      # Upload test artifacts for debugging
       - name: Upload Test Artifacts
         if: always()
         uses: actions/upload-artifact@v4
@@ -116,3 +138,6 @@ jobs:
             allure-results/
             emulator_logcat.txt
             wdio_output.txt
+            screenshot.png
+            screenshots/
+            logs/
