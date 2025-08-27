@@ -1,7 +1,7 @@
 name: Appium Emulator CI (API 35 Google Play x86_64)
 
 on:
-  pull_request:
+  push:
   workflow_dispatch:
 
 jobs:
