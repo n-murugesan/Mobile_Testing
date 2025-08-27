@@ -7,11 +7,17 @@ on:
 jobs:
   e2e:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
 
-    # Temporary envs per your request (MOVE TO SECRETS ASAP)
     env:
+      # ---- Emulator / Android config ----
       AVD_NAME: api35-x86_64-play
+      SDK_ROOT: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_AVD_HOME: /home/runner/.android/avd
+
+      # ---- TEMP credentials (move to GitHub Secrets ASAP) ----
       GOOGLE_EMAIL: "ashish.prasad@alvaria.com"
       GOOGLE_PASSWORD: "Goodsheep66$$"
 
@@ -35,13 +41,53 @@ jobs:
         run: |
           if [ -f package-lock.json ]; then npm ci; elif [ -f package.json ]; then npm i; fi
 
-      # Enable KVM for better emulator performance on ubuntu-latest
+      # Hardware acceleration on Ubuntu runners
       - name: Enable KVM group perms
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
 
+      # If we have a previously saved AVD, bring it back
+      - name: Restore AVD (if previously saved)
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ env.AVD_NAME }}-bundle
+          path: ~/.android/avd/
+        continue-on-error: true
+
+      # Ensure SDK packages are present and the AVD exists.
+      # If the AVD was restored above, this is a no-op for creation.
+      - name: Install SDK packages & ensure AVD exists
+        shell: bash
+        run: |
+          set -euxo pipefail
+
+          mkdir -p "$HOME/.android" "$ANDROID_AVD_HOME"
+          : > "$HOME/.android/repositories.cfg"
+
+          # Accept licenses (avoid SIGPIPE non-zero)
+          set +o pipefail
+          yes | "$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null
+          set -o pipefail
+
+          "$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --install \
+            "platform-tools" "platforms;android-35" "emulator" \
+            "system-images;android-35;google_apis_playstore;x86_64"
+
+          AVD_DIR="$ANDROID_AVD_HOME/${AVD_NAME}.avd"
+          if [ ! -d "$AVD_DIR" ]; then
+            echo "Creating AVD: $AVD_NAME"
+            echo "no" | "$SDK_ROOT/cmdline-tools/latest/bin/avdmanager" create avd \
+              --force -n "$AVD_NAME" \
+              --package "system-images;android-35;google_apis_playstore;x86_64" \
+              --abi "google_apis_playstore/x86_64"
+            printf 'hw.cpu.ncore=3\n' >> "$AVD_DIR/config.ini"
+          else
+            echo "AVD already present at $AVD_DIR (restored)."
+          fi
+
+      # Boot the emulator and harden Android & Chrome so no popups get in the way
       - name: Boot emulator (API 35 / Google Play / x86_64)
         uses: reactivecircus/android-emulator-runner@v2
         with:
@@ -49,21 +95,23 @@ jobs:
           target: google_apis_playstore
           arch: x86_64
           avd-name: ${{ env.AVD_NAME }}
-          # allow snapshots by NOT passing -no-snapshot / -no-snapshot-save
+          force-avd-creation: false              # reuse restored/created AVD
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
           disable-animations: true
           script: |
+            # Wait until device is truly ready (not just adb-connected)
             adb wait-for-device
+            until adb shell getprop sys.boot_completed 2>/dev/null | grep -q "1"; do sleep 1; done
+            until adb shell dumpsys window 2>/dev/null | grep -q mCurrentFocus; do sleep 1; done
 
-            # --- Android QoL ---
+            # Android QoL
             adb shell settings put global window_animation_scale 0
             adb shell settings put global transition_animation_scale 0
             adb shell settings put global animator_duration_scale 0
-            # Reduce package verification nags (best-effort)
             adb shell settings put global package_verifier_enable 0 || true
             adb shell settings put global verifier_verify_adb_installs 0 || true
 
-            # --- Chrome: disable first-run & default-browser prompts ---
+            # Chrome: disable first-run & default-browser prompts
             adb shell 'printf "chrome --disable-fre --no-first-run --no-default-browser-check --disable-search-engine-choice-screen\n" > /data/local/tmp/chrome-command-line'
             adb shell am force-stop com.android.chrome || true
             adb shell pm clear com.android.chrome || true
@@ -71,19 +119,27 @@ jobs:
             sleep 3
             adb shell am force-stop com.android.chrome || true
 
-            # Sanity checks
+            # Sanity
             adb shell getprop ro.product.cpu.abi
             adb shell getprop ro.build.version.sdk
 
-      # ---- Place your sign-in/test step here. Your code can read GOOGLE_EMAIL/GOOGLE_PASSWORD ----
-      # Example scaffolding only (replace with your real command):
+      # ---- Your tests go here (reads GOOGLE_EMAIL / GOOGLE_PASSWORD) ----
       - name: Run Appium tests (placeholder)
         env:
           GOOGLE_EMAIL: ${{ env.GOOGLE_EMAIL }}
           GOOGLE_PASSWORD: ${{ env.GOOGLE_PASSWORD }}
         run: |
           echo "Starting tests…"
-          # Example: npm run e2e:signin
-          # Your tests should use process.env.GOOGLE_EMAIL / GOOGLE_PASSWORD
-          # and drive the Google sign-in flow (in Settings or inside your app/Chrome).
-          echo "NOTE: Credentials are available in env; do NOT echo them."
+          # Example:
+          # npm run e2e
+          # In your TS code: process.env.GOOGLE_EMAIL / process.env.GOOGLE_PASSWORD
+
+      # Persist the AVD so future runs keep state (e.g., once you sign in)
+      - name: Save AVD for reuse
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.AVD_NAME }}-bundle
+          path: |
+            ~/.android/avd/${{ env.AVD_NAME }}.avd
+            ~/.android/avd/${{ env.AVD_NAME }}.ini
