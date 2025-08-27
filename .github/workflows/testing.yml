@@ -87,78 +87,53 @@ jobs:
             echo "AVD already present at $AVD_DIR (restored)."
           fi
 
-      # Boot emulator, prep Android+Chrome, start Appium, run tests, collect artifacts
       - name: Run Appium Tests on Emulator
         uses: reactivecircus/android-emulator-runner@v2
+        env:
+          ANDROID_EMULATOR_WAIT_TIME_BEFORE_KILL: 60
         with:
-          avd-name: ${{ env.AVD_NAME }}
+          avd-name: ${{ env.AVD_NAME }}           # use the same AVD you save/restore
           api-level: 35
-          target: google_apis_playstore
+          target: google_apis_playstore           # Play image for Google sign-in
           arch: x86_64
+          ram-size: 2048M
+          disk-size: 2048M
           force-avd-creation: false
-          # allow snapshots by NOT passing -no-snapshot / -no-snapshot-save
-          emulator-options: -snapshot default_boot -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           disable-animations: true
           script: |
-            set -euxo pipefail
-
-            # Wait until fully ready (adb online + launcher visible)
+            set -ex
             adb wait-for-device
             until adb shell getprop sys.boot_completed 2>/dev/null | grep -q "1"; do sleep 1; done
             until adb shell dumpsys window 2>/dev/null | grep -q mCurrentFocus; do sleep 1; done
-
-            # --- Android QoL ---
             adb shell settings put global window_animation_scale 0
             adb shell settings put global transition_animation_scale 0
             adb shell settings put global animator_duration_scale 0
             adb shell settings put global package_verifier_enable 0 || true
             adb shell settings put global verifier_verify_adb_installs 0 || true
-
-            # --- Chrome: no first-run / default-browser / choice-screen ---
             adb shell 'printf "chrome --disable-fre --no-first-run --no-default-browser-check --disable-search-engine-choice-screen\n" > /data/local/tmp/chrome-command-line'
             adb shell am force-stop com.android.chrome || true
             adb shell pm clear com.android.chrome || true
             adb shell monkey -p com.android.chrome -c android.intent.category.LAUNCHER 1
             sleep 3
             adb shell am force-stop com.android.chrome || true
-
-            # Sanity
             adb shell getprop ro.product.cpu.abi
             adb shell getprop ro.build.version.sdk
-
-            # -------- Test run pipeline --------
-            # 1) Install Appium 2.6.0
             npm i -g appium@2.6.0
-
-            # 2) Verify UiAutomator2 driver (install if needed)
             appium driver list --installed || true
-            # appium driver install uiautomator2 || true
-
-            # 3) Start Appium (background)
             appium --relaxed-security > appium.log 2>&1 &
             APP_PID=$!
             sleep 8
-
-            # 4) Optional: install your AUT (if not part of snapshot)
-            if [ -f app.apk ]; then
-              adb install -r app.apk || true
-            fi
-
-            # 5) Quick device info & visibility
+            if [ -f app.apk ]; then adb install -r app.apk || true; fi
             adb devices > emulator_logcat.txt
             adb shell dumpsys window | grep mCurrentFocus >> emulator_logcat.txt || true
-
-            # 6) Run WDIO tests
             npx wdio run wdio.conf.ts | tee wdio_output.txt
-
-            # 7) Grab screenshot & logs for artifacts
             adb shell screencap /sdcard/screenshot.png || true
             adb pull /sdcard/screenshot.png ./screenshot.png || true
             adb logcat -d >> emulator_logcat.txt || true
-
-            # 8) Stop Appium and (politely) kill emulator
             kill $APP_PID || true
             adb -s emulator-5554 emu kill || true
+
 
       - name: Upload Test Artifacts
         if: always()
