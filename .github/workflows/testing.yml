@@ -30,28 +30,55 @@ jobs:
       # Install SDK packages & create the AVD *ourselves*
       - name: Install SDK components & create AVD
         run: |
-          yes | ${SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager --licenses
-          ${SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager \
+          set -euxo pipefail
+          SDK_ROOT=${SDK_ROOT:-/usr/local/lib/android/sdk}
+          AVD_NAME=${AVD_NAME:-api35-x86_64-play}
+          AVD_DIR="$HOME/.android/avd/${AVD_NAME}.avd"
+          
+          # (Optional) avoid sdkmanager warning if repos file missing
+          mkdir -p "$HOME/.android" && : > "$HOME/.android/repositories.cfg"
+          
+          # Accept licenses & install packages
+          yes | "${SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager" --licenses
+          "${SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager" --install \
             "platform-tools" "platforms;android-35" "emulator" \
             "system-images;android-35;google_apis_playstore;x86_64"
-          echo "no" | ${SDK_ROOT}/cmdline-tools/latest/bin/avdmanager create avd \
+          
+          # Create AVD (non-interactive)
+          echo "no" | "${SDK_ROOT}/cmdline-tools/latest/bin/avdmanager" create avd \
             --force -n "${AVD_NAME}" \
             --package "system-images;android-35;google_apis_playstore;x86_64" \
             --abi "google_apis_playstore/x86_64"
-          # small tweak: 3 cores is plenty on GH runners
-          printf 'hw.cpu.ncore=3\n' >> "$HOME/.android/avd/${AVD_NAME}.avd/config.ini"
+          
+          # Verify AVD directory now exists (guard against race)
+          if [ ! -d "$AVD_DIR" ]; then
+            echo "ERROR: AVD dir not created: $AVD_DIR"
+            ls -la "$HOME/.android/avd" || true
+            exit 1
+          fi
+          
+          # Safe to tweak config now
+          printf 'hw.cpu.ncore=3\n' >> "$AVD_DIR/config.ini"
+
+
 
       # Inject your snapshot into the AVD we just created
       - name: Inject S3 snapshot into AVD
         shell: bash
         run: |
-          set -euxo pipefail
+          set -euxo pipefail          
           AVD_DIR="$HOME/.android/avd/${AVD_NAME}.avd"
           TMPDIR="$(mktemp -d)"
+          
           echo "Downloading snapshot..."
           curl -L --fail --retry 5 --retry-all-errors -o "$TMPDIR/snap.zip" "$SNAP_URL"
+          
+          echo "Unzipping..."
           unzip -o "$TMPDIR/snap.zip" -d "$TMPDIR/unzipped" >/dev/null
+          
           mkdir -p "$AVD_DIR/snapshots/default_boot"
+          
+          # Copy snapshot regardless of archive layout
           if [ -d "$TMPDIR/unzipped/snapshots" ]; then
             cp -a "$TMPDIR/unzipped/snapshots/." "$AVD_DIR/snapshots/"
           elif [ -d "$TMPDIR/unzipped/default_boot" ]; then
@@ -59,21 +86,25 @@ jobs:
           else
             cp -a "$TMPDIR/unzipped/." "$AVD_DIR/snapshots/default_boot/"
           fi
+          
           CONFIG="$AVD_DIR/config.ini"
           touch "$CONFIG"
+          
+          # Ensure Quick Boot uses our snapshot
           grep -q "^fastboot.forceChosenSnapshotBoot=" "$CONFIG" || echo "fastboot.forceChosenSnapshotBoot=yes" >> "$CONFIG"
           if grep -q "^fastboot.chosenSnapshotFile=" "$CONFIG"; then
             sed -i.bak 's%^fastboot.chosenSnapshotFile=.*%fastboot.chosenSnapshotFile=snapshots/default_boot%' "$CONFIG"
           else
             echo "fastboot.chosenSnapshotFile=snapshots/default_boot" >> "$CONFIG"
           fi
+          
           echo "Snapshot tree:"
           ls -R "$AVD_DIR/snapshots" || true
-
-          echo "Config.ini tail:"
+          
+          echo "config.ini:"
           cat "$CONFIG"
-
-          echo "Snapshot file list:"
+          
+          echo "Snapshot file list (depth 2):"
           find "$AVD_DIR/snapshots" -maxdepth 2 -type f -print
 
 
