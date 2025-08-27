@@ -42,17 +42,30 @@ jobs:
           export ANDROID_HOME=$ANDROID_SDK_ROOT
           export PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator
           
+          # Debug environment
+          echo "ANDROID_HOME: $ANDROID_HOME"
+          echo "ANDROID_SDK_ROOT: $ANDROID_SDK_ROOT"
+          ls -la $ANDROID_HOME/ || true
+          
           # Accept licenses
           yes | sdkmanager --licenses || true
           
-          # Install necessary packages
-          sdkmanager "platforms;android-35" "system-images;android-35;google_apis;x86_64" "emulator" "platform-tools"
+          # Install necessary packages for ARM64 Google Play
+          echo "Installing Android packages..."
+          sdkmanager "platforms;android-35" "system-images;android-35;google_apis_playstore;arm64-v8a" "emulator" "platform-tools"
           
-          # Create AVD
-          echo no | avdmanager create avd --force --name test_avd --package "system-images;android-35;google_apis;x86_64" --abi google_apis/x86_64
+          # List available system images to verify
+          sdkmanager --list | grep "system-images;android-35" || true
           
-          # Show AVD info
+          # Create AVD with ARM64 Google Play
+          echo "Creating AVD..."
+          echo no | avdmanager create avd --force --name test_avd --package "system-images;android-35;google_apis_playstore;arm64-v8a" --abi google_apis_playstore/arm64-v8a
+          
+          # Verify AVD creation
+          echo "Verifying AVD creation..."
           avdmanager list avd
+          ls -la ~/.android/avd/ || true
+          ls -la ~/.android/avd/test_avd.avd/ || true
 
       - name: Download and Setup Custom Snapshot
         run: |
@@ -106,8 +119,20 @@ jobs:
           # Kill any existing emulators
           adb devices | grep emulator | cut -f1 | while read line; do adb -s $line emu kill; done || true
           
-          # Start emulator in background
-          echo "Starting emulator..."
+          # Verify AVD exists before starting
+          echo "Available AVDs:"
+          avdmanager list avd || true
+          
+          echo "AVD directory contents:"
+          ls -la ~/.android/avd/ || true
+          
+          if [ ! -f ~/.android/avd/test_avd.ini ]; then
+            echo "ERROR: test_avd.ini not found!"
+            exit 1
+          fi
+          
+          # Start emulator in background with ARM64 optimizations
+          echo "Starting ARM64 emulator..."
           emulator -avd test_avd \
             -no-window \
             -no-audio \
@@ -118,18 +143,19 @@ jobs:
             -memory 2048 \
             -partition-size 2048 \
             -no-metrics \
+            -qemu -smp 2 \
             -verbose &
           
-          # Wait for device to be online
-          echo "Waiting for emulator to start..."
-          timeout 300 adb wait-for-device
+          # Wait for device to be online (ARM64 takes longer)
+          echo "Waiting for emulator to start (ARM64 may take longer)..."
+          timeout 600 adb wait-for-device
           
-          # Wait for boot to complete
+          # Wait for boot to complete (ARM64 needs more time)
           echo "Waiting for boot to complete..."
-          timeout 300 bash -c 'until [[ $(adb shell getprop sys.boot_completed) == "1" ]]; do sleep 5; done'
+          timeout 600 bash -c 'until [[ $(adb shell getprop sys.boot_completed) == "1" ]]; do sleep 10; done'
           
           # Additional wait for system to stabilize
-          sleep 30
+          sleep 60
           
           echo "Emulator started successfully!"
           adb devices
