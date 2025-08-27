@@ -55,6 +55,7 @@ jobs:
             echo 'Snapshot extracted.'
             ls -l ~/.android/avd/test_avd.avd/snapshots/snap_2025-08-27_10-53-29 || echo 'Snapshot directory listing failed.'
             chmod -R u+rw ~/.android/avd/test_avd.avd/snapshots/snap_2025-08-27_10-53-29 || echo 'Failed to set snapshot permissions.'
+            ls -l ~/.android/avd/test_avd.avd/snapshots/ > snapshot_dir.txt
           "
 
       - name: Debug SDK Packages (if cache miss)
@@ -104,6 +105,7 @@ jobs:
               adb devices >> emulator_logcat.txt
               adb install app.apk
               mkdir -p screenshots logs
+              adb shell dumpsys account > account_dump.txt || true
               npx wdio run wdio.conf.ts | tee wdio_output.txt &
               PID=\$!
               INTERVAL=5
@@ -141,5 +143,7 @@ jobs:
             emulator_logcat.txt
             wdio_output.txt
             snapshot.png
+            snapshot_dir.txt
+            account_dump.txt
             screenshots/
             logs/
