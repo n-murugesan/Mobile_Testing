@@ -7,7 +7,7 @@ on:
 jobs:
   appium-emulator-test:
     runs-on: ubuntu-latest
-    timeout-minutes: 60  # Increased for large snapshot download
+    timeout-minutes: 60
 
     steps:
       - name: Checkout Code
@@ -18,19 +18,13 @@ jobs:
         with:
           node-version: '22.16.0'
 
-      - name: Verify Node.js Version
-        run: |
-          node -v
-          npm -v
-
       - name: Install NPM Dependencies
         run: npm ci
 
-      - name: Install Zip Tools
-        run: sudo apt install unzip -y
-
-      - name: Install ADB
-        run: sudo apt-get update && sudo apt-get install -y android-tools-adb
+      - name: Install System Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y unzip android-tools-adb
 
       - name: Enable KVM for Hardware Acceleration
         run: |
@@ -38,137 +32,190 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
 
-      - name: Cache AVD Config
-        uses: actions/cache@v4
-        id: avd-cache
-        with:
-          path: |
-            ~/.android/avd/*
-            ~/.android/adb*
-          key: avd-35-config
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
 
-      - name: Pre-start ADB (helps emulator talk to daemon on 5037)
+      # Method 1: Try with manual emulator management (Recommended)
+      - name: Create AVD Manually
         run: |
+          # Set environment variables
+          export ANDROID_HOME=$ANDROID_SDK_ROOT
+          export PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator
+          
+          # Accept licenses
+          yes | sdkmanager --licenses || true
+          
+          # Install necessary packages
+          sdkmanager "platforms;android-35" "system-images;android-35;google_apis;x86_64" "emulator" "platform-tools"
+          
+          # Create AVD
+          echo no | avdmanager create avd --force --name test_avd --package "system-images;android-35;google_apis;x86_64" --abi google_apis/x86_64
+          
+          # Show AVD info
+          avdmanager list avd
+
+      - name: Download and Setup Custom Snapshot
+        run: |
+          set -euo pipefail
+          
+          # Download snapshot
+          echo "Downloading snapshot..."
+          curl -L -o snap_boot.zip 'https://emulatorsnapshots.s3.ap-south-1.amazonaws.com/snap_boot.zip?response-content-disposition=inline&X-Amz-Content-Sha256=UNSIGNED-PAYLOAD&X-Amz-Security-Token=IQoJb3JpZ2luX2VjEDAaCmFwLXNvdXRoLTEiSDBGAiEA3ikuld9xQtYcps2K7A5IFMXD2tmPyVUTrZY2FVypqwgCIQC72vY0DOIFmKmA5CzqY%2Brfopp8hrXanKRhy5ZzXRXcjSrCAwiJ%2F%2F%2F%2F%2F%2F%2F%2F%2F%2F8BEAMaDDQ1ODM5MTc2NzEyMSIMnQ9SGVebMfJmmE6MKpYD0L3z%2FM6IuBMpiNi9OVUnHObgUiHqYtCrxp%2B9tGKsvUvCVNDoWichdoMg2E6s2wbQcDEIeNX531y2hzxoFJu32Bu7SreXslFCe%2FNBPPr1eCZ5LSGIXH22%2BN7ETvTcHo6zbRXJ%2FWUjlFoz1sE2mSjYofmcERnLEas%2FyRn6OXzxSfripjKhIOooBeFQHPp6q9ZSokgZLLryRyezjhi%2FaFVKQWmCKcYM03RBu3Guiu1kaYMBmcuCAll8PL5Re0bRc2G5me%2F9F3kYbQEGjQI5vgbUukSMSbO5eC4RA9Dg%2BlCUcJz4c1je2pOXX62L7SUnvLHoUwNJWUI%2BpD7bBG7BrbHMdCeeXFIDzZHEZl0LaOBy5vvDC4YJSIqKhsysbq2eAiPuUa37CfNCiR2mYaqosXXKKTEj4nRhknhoHSzaOpBqVsXf%2BvvjTNRSWenvqGVyDEO%2BtJQiULJZbkeewBbLhg1FR76UiG9%2F5uD%2FdVeaAYlOtz2KR9N7yQDJ88tNyv%2Fe73BmxyC8l2nzPcEzOojbY%2BfS5%2BS1l2Q%2BODCtnbrFBjrdApPst2wklrDNLw6Y%2FVx81WY1ZhZSEZ1snA2Ra2ex1Mun5rOAJeaVwe5rAmNh4jIPKR27rx6SyXT0R36v7pSeZhMGRWyi0zskMTmt70jFciYquxTCCGZlZcVdIG%2BJORET4TBmlnt26JMaX6UFv40y1ZmiwysQa%2BzpTiQhXFdu0gG3Qsq0nI%2FVdqTkXiq72rnpSlSea9JNSQ%2BMug5CASDOPRYxUMbjS1cvUlcDDPQU5GVLf7qTSpd82jSZVJaGvmhhU5lnt%2Fv6uNGXUNrSbqp6oJ1eHSEC5YzrzbHouSid7vVX4noosKUoS1P%2FM9xNrvZnlKpCDkHoUK5T2Nvtduqe9CJS02tTEgRs9WJDFlLFyWBEfsCNtLFOE8xVYWTuBQDpbl3gNfRSlgOsZu4OKy9msfnDA3UGhIno0idgzpuV4mpvrCAlZ5Xqagwc3ZKIhgoh2N9DI%2BiuBerovmxl4Dk%3D&X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=ASIAWVOSHJBITGDOAVNO%2F20250827%2Fap-south-1%2Fs3%2Faws4_request&X-Amz-Date=20250827T073933Z&X-Amz-Expires=36000&X-Amz-SignedHeaders=host&X-Amz-Signature=9bfb9214c1fee9e1398fc9ca7bc1185de0d5b45bfbc45bf3b7eb561fac1d4c0b'
+          
+          # Extract snapshot
+          echo "Extracting snapshot..."
+          unzip -q snap_boot.zip
+          
+          # Setup snapshot directory structure
+          AVD_DIR="$HOME/.android/avd/test_avd.avd"
+          SNAPSHOTS_DIR="$AVD_DIR/snapshots"
+          
+          # Create snapshots directory
+          mkdir -p "$SNAPSHOTS_DIR"
+          
+          # Clean up any existing snapshots
+          rm -rf "$SNAPSHOTS_DIR"/* || true
+          
+          # Move snapshot contents
+          if [ -d "snap_2025-08-27_10-53-29" ]; then
+            mv snap_2025-08-27_10-53-29/* "$SNAPSHOTS_DIR/" || true
+            rmdir snap_2025-08-27_10-53-29 || true
+          fi
+          
+          # Clean up download
+          rm -f snap_boot.zip
+          rm -rf __MACOSX || true
+          
+          # Set permissions
+          chmod -R 755 "$SNAPSHOTS_DIR" || true
+          
+          # List snapshot contents for debugging
+          echo "Snapshot directory contents:"
+          ls -la "$SNAPSHOTS_DIR" || echo "Snapshot directory listing failed"
+
+      - name: Start Emulator with Custom Configuration
+        run: |
+          set -euo pipefail
+          
+          export ANDROID_HOME=$ANDROID_SDK_ROOT
+          export PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator
+          
+          # Start ADB server
           adb start-server
-          adb devices || true
+          
+          # Kill any existing emulators
+          adb devices | grep emulator | cut -f1 | while read line; do adb -s $line emu kill; done || true
+          
+          # Start emulator in background
+          echo "Starting emulator..."
+          emulator -avd test_avd \
+            -no-window \
+            -no-audio \
+            -no-boot-anim \
+            -camera-back none \
+            -camera-front none \
+            -gpu swiftshader_indirect \
+            -memory 2048 \
+            -partition-size 2048 \
+            -no-metrics \
+            -verbose &
+          
+          # Wait for device to be online
+          echo "Waiting for emulator to start..."
+          timeout 300 adb wait-for-device
+          
+          # Wait for boot to complete
+          echo "Waiting for boot to complete..."
+          timeout 300 bash -c 'until [[ $(adb shell getprop sys.boot_completed) == "1" ]]; do sleep 5; done'
+          
+          # Additional wait for system to stabilize
+          sleep 30
+          
+          echo "Emulator started successfully!"
+          adb devices
 
-      - name: Debug SDK Packages (if cache miss)
-        if: steps.avd-cache.outputs.cache-hit != 'true'
+      - name: Run Appium Tests
         run: |
-          sdkmanager --list | grep system-images || true
-        continue-on-error: true
-
-      - name: Create AVD (if not cached)
-        if: steps.avd-cache.outputs.cache-hit != 'true'
-        uses: reactivecircus/android-emulator-runner@v2
-        with:
-          avd-name: test_avd
-          api-level: 35
-          target: google_apis
-          arch: x86_64
-          ram-size: 2048M
-          disk-size: 2048M
-          force-avd-creation: true
-          # Prevent any snapshot load/save here so we don't see 'default_boot' warnings during this preparatory run
-          emulator-options: -no-snapshot -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -no-metrics
-          disable-animations: true
-          script: echo "Generated AVD config for caching."
-
-      - name: Download and Extract Snapshot
-        run: |
-          /bin/bash -c "
-            set -euo pipefail
-            curl -L -o snap_boot.zip 'https://emulatorsnapshots.s3.ap-south-1.amazonaws.com/snap_boot.zip?response-content-disposition=inline&X-Amz-Content-Sha256=UNSIGNED-PAYLOAD&X-Amz-Security-Token=IQoJb3JpZ2luX2VjEDAaCmFwLXNvdXRoLTEiSDBGAiEA3ikuld9xQtYcps2K7A5IFMXD2tmPyVUTrZY2FVypqwgCIQC72vY0DOIFmKmA5CzqY%2Brfopp8hrXanKRhy5ZzXRXcjSrCAwiJ%2F%2F%2F%2F%2F%2F%2F%2F%2F%2F8BEAMaDDQ1ODM5MTc2NzEyMSIMnQ9SGVebMfJmmE6MKpYD0L3z%2FM6IuBMpiNi9OVUnHObgUiHqYtCrxp%2B9tGKsvUvCVNDoWichdoMg2E6s2wbQcDEIeNX531y2hzxoFJu32Bu7SreXslFCe%2FNBPPr1eCZ5LSGIXH22%2BN7ETvTcHo6zbRXJ%2FWUjlFoz1sE2mSjYofmcERnLEas%2FyRn6OXzxSfripjKhIOooBeFQHPp6q9ZSokgZLLryRyezjhi%2FaFVKQWmCKcYM03RBu3Guiu1kaYMBmcuCAll8PL5Re0bRc2G5me%2F9F3kYbQEGjQI5vgbUukSMSbO5eC4RA9Dg%2BlCUcJz4c1je2pOXX62L7SUnvLHoUwNJWUI%2BpD7bBG7BrbHMdCeeXFIDzZHEZl0LaOBy5vvDC4YJSIqKhsysbq2eAiPuUa37CfNCiR2mYaqosXXKKTEj4nRhknhoHSzaOpBqVsXf%2BvvjTNRSWenvqGVyDEO%2BtJQiULJZbkeewBbLhg1FR76UiG9%2F5uD%2FdVeaAYlOtz2KR9N7yQDJ88tNyv%2Fe73BmxyC8l2nzPcEzOojbY%2BfS5%2BS1l2Q%2BODCtnbrFBjrdApPst2wklrDNLw6Y%2FVx81WY1ZhZSEZ1snA2Ra2ex1Mun5rOAJeaVwe5rAmNh4jIPKR27rx6SyXT0R36v7pSeZhMGRWyi0zskMTmt70jFciYquxTCCGZlZcVdIG%2BJORET4TBmlnt26JMaX6UFv40y1ZmiwysQa%2BzpTiQhXFdu0gG3Qsq0nI%2FVdqTkXiq72rnpSlSea9JNSQ%2BMug5CASDOPRYxUMbjS1cvUlcDDPQU5GVLf7qTSpd82jSZVJaGvmhhU5lnt%2Fv6uNGXUNrSbqp6oJ1eHSEC5YzrzbHouSid7vVX4noosKUoS1P%2FM9xNrvZnlKpCDkHoUK5T2Nvtduqe9CJS02tTEgRs9WJDFlLFyWBEfsCNtLFOE8xVYWTuBQDpbl3gNfRSlgOsZu4OKy9msfnDA3UGhIno0idgzpuV4mpvrCAlZ5Xqagwc3ZKIhgoh2N9DI%2BiuBerovmxl4Dk%3D&X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=ASIAWVOSHJBITGDOAVNO%2F20250827%2Fap-south-1%2Fs3%2Faws4_request&X-Amz-Date=20250827T073933Z&X-Amz-Expires=36000&X-Amz-SignedHeaders=host&X-Amz-Signature=9bfb9214c1fee9e1398fc9ca7bc1185de0d5b45bfbc45bf3b7eb561fac1d4c0b'
-            mkdir -p ~/.android/avd/test_avd.avd/snapshots
-            unzip -q snap_boot.zip -d ~/.android/avd/test_avd.avd/snapshots
-            rm -rf ~/.android/avd/test_avd.avd/snapshots/__MACOSX
-            echo 'Snapshot extracted.'
-            ls -l ~/.android/avd/test_avd.avd/snapshots/snap_2025-08-27_10-53-29 || echo 'Snapshot directory listing failed.'
-            chmod -R u+rw ~/.android/avd/test_avd.avd/snapshots/snap_2025-08-27_10-53-29 || echo 'Failed to set snapshot permissions.'
-            # Rename your custom snapshot to 'default_boot' so the emulator loads it by default
-            if [ -d ~/.android/avd/test_avd.avd/snapshots/snap_2025-08-27_10-53-29 ]; then
-              rm -rf ~/.android/avd/test_avd.avd/snapshots/default_boot || true
-              mv ~/.android/avd/test_avd.avd/snapshots/snap_2025-08-27_10-53-29 ~/.android/avd/test_avd.avd/snapshots/default_boot
-              echo 'Renamed snapshot to default_boot.'
+          set -euo pipefail
+          
+          # Install Appium
+          npm install -g appium@2.6.0
+          
+          # Check Appium drivers
+          appium driver list --installed
+          
+          # Start Appium server
+          echo "Starting Appium server..."
+          appium --relaxed-security --log-level debug > appium.log 2>&1 &
+          APPIUM_PID=$!
+          sleep 15
+          
+          # Install APK
+          echo "Installing APK..."
+          adb install app.apk
+          
+          # Create directories for artifacts
+          mkdir -p screenshots logs
+          
+          # Dump system info for debugging
+          adb shell dumpsys account > account_dump.txt || true
+          
+          # Run tests with timeout
+          echo "Running WebDriver tests..."
+          npx wdio run wdio.conf.ts | tee wdio_output.txt &
+          TEST_PID=$!
+          
+          # Monitor test execution with timeout
+          INTERVAL=5
+          MAX_MINUTES=35
+          ELAPSED=0
+          
+          while kill -0 $TEST_PID 2>/dev/null; do
+            sleep ${INTERVAL}m
+            ELAPSED=$((ELAPSED + INTERVAL))
+            echo "Test Elapsed: ${ELAPSED} minutes - Still running..."
+            
+            if [ $ELAPSED -ge $MAX_MINUTES ]; then
+              echo "Timeout: Killing test after ${MAX_MINUTES} minutes."
+              kill -9 $TEST_PID || true
+              kill -9 $APPIUM_PID || true
+              exit 1
             fi
-            ls -l ~/.android/avd/test_avd.avd/snapshots/ > snapshot_dir.txt
-          "
-
-
-      - name: Run Appium Tests on Emulator
-        uses: reactivecircus/android-emulator-runner@v2
-        env:
-          ANDROID_EMULATOR_WAIT_TIME_BEFORE_KILL: 90
-        with:
-          avd-name: test_avd
-          api-level: 35
-          target: google_apis
-          arch: x86_64
-          ram-size: 2048M
-          disk-size: 2048M
-          force-avd-creation: false
-          # Load our renamed snapshot explicitly and don't save back over it
-          emulator-options: -snapshot default_boot -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -no-metrics
-          disable-animations: true
-          script: |
-            /bin/bash -c "
-              set -euo pipefail
-              adb start-server
-              adb wait-for-device
-              echo 'Waiting for sys.boot_completed...'
-              adb shell 'while [[ \"\$(getprop sys.boot_completed)\" != \"1\" ]]; do sleep 1; done;'
-              echo 'Device booted.'
-
-              npm install -g appium@2.6.0
-              appium driver list --installed
-              appium --relaxed-security &
-              sleep 10
-
-              adb devices >> emulator_logcat.txt
-              adb install app.apk
-
-              mkdir -p screenshots logs
-              adb shell dumpsys account > account_dump.txt || true
-
-              npx wdio run wdio.conf.ts | tee wdio_output.txt &
-              PID=\$!
-              INTERVAL=5
-              MAX_MIN=35
-              ELAPSED=0
-              while kill -0 \$PID 2>/dev/null; do
-                sleep \${INTERVAL}m
-                ELAPSED=\$((ELAPSED + INTERVAL))
-                echo \"Test Elapsed: \${ELAPSED} minutes - Still running...\"
-                if [ \$ELAPSED -ge \$MAX_MIN ]; then
-                  echo \"Timeout: Failing after \${MAX_MIN} minutes.\"
-                  kill -9 \$PID
-                  exit 1
-                fi
-              done
-              wait \$PID
-              EXIT_CODE=\$?
-              if [ \$EXIT_CODE -ne 0 ]; then
-                echo \"Tests failed with code \$EXIT_CODE\"
-                exit \$EXIT_CODE
-              fi
-
-              adb shell screencap /sdcard/snapshot.png || true
-              adb pull /sdcard/snapshot.png ./snapshot.png || true
-              adb logcat -d >> emulator_logcat.txt || true
-              adb -s emulator-5554 emu kill || true
-            "
+          done
+          
+          # Wait for test completion and get exit code
+          wait $TEST_PID
+          EXIT_CODE=$?
+          
+          # Clean up Appium
+          kill -9 $APPIUM_PID || true
+          
+          # Capture final screenshot and logs
+          adb shell screencap /sdcard/final_screenshot.png || true
+          adb pull /sdcard/final_screenshot.png ./final_screenshot.png || true
+          adb logcat -d > emulator_logcat.txt || true
+          
+          # Kill emulator
+          adb emu kill || true
+          
+          if [ $EXIT_CODE -ne 0 ]; then
+            echo "Tests failed with code $EXIT_CODE"
+            exit $EXIT_CODE
+          fi
+          
+          echo "Tests completed successfully!"
 
       - name: Upload Test Artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: test-artifacts
+          name: test-artifacts-${{ github.run_number }}
           path: |
             allure-results/
             emulator_logcat.txt
+            appium.log
             wdio_output.txt
-            snapshot.png
-            snapshot_dir.txt
+            final_screenshot.png
             account_dump.txt
             screenshots/
             logs/
