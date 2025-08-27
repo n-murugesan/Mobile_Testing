@@ -1,4 +1,4 @@
-name: Appium Tests (GitHub Actions with Emulator)
+name: Appium Tests (ARM64 Optimized)
 
 on:
   push:
@@ -7,7 +7,7 @@ on:
 jobs:
   appium-emulator-test:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 90  # ARM64 emulation takes longer
 
     steps:
       - name: Checkout Code
@@ -24,8 +24,9 @@ jobs:
       - name: Install System Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y unzip android-tools-adb
+          sudo apt-get install -y unzip android-tools-adb qemu-user-static
 
+      # Note: KVM doesn't help with ARM64 emulation on x86_64, but we'll keep it for completeness
       - name: Enable KVM for Hardware Acceleration
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
@@ -35,8 +36,7 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      # Method 1: Try with manual emulator management (Recommended)
-      - name: Create AVD Manually
+      - name: Create ARM64 AVD
         run: |
           # Set environment variables
           export ANDROID_HOME=$ANDROID_SDK_ROOT
@@ -44,28 +44,46 @@ jobs:
           
           # Debug environment
           echo "ANDROID_HOME: $ANDROID_HOME"
-          echo "ANDROID_SDK_ROOT: $ANDROID_SDK_ROOT"
-          ls -la $ANDROID_HOME/ || true
+          echo "PATH: $PATH"
           
           # Accept licenses
           yes | sdkmanager --licenses || true
           
           # Install necessary packages for ARM64 Google Play
           echo "Installing Android packages..."
-          sdkmanager "platforms;android-35" "system-images;android-35;google_apis_playstore;arm64-v8a" "emulator" "platform-tools"
+          sdkmanager "platforms;android-35" "system-images;android-35;google_apis_playstore;arm64-v8a" "emulator" "platform-tools" "build-tools;35.0.0"
           
-          # List available system images to verify
+          # Verify installation
+          echo "Available system images:"
           sdkmanager --list | grep "system-images;android-35" || true
           
           # Create AVD with ARM64 Google Play
-          echo "Creating AVD..."
-          echo no | avdmanager create avd --force --name test_avd --package "system-images;android-35;google_apis_playstore;arm64-v8a" --abi google_apis_playstore/arm64-v8a
+          echo "Creating ARM64 AVD..."
+          echo no | avdmanager create avd \
+            --force \
+            --name test_avd \
+            --package "system-images;android-35;google_apis_playstore;arm64-v8a" \
+            --abi google_apis_playstore/arm64-v8a
+          
+          # Configure AVD for better ARM64 performance
+          AVD_CONFIG_FILE="$HOME/.android/avd/test_avd.avd/config.ini"
+          if [ -f "$AVD_CONFIG_FILE" ]; then
+            echo "Configuring AVD for ARM64 optimization..."
+            # Add optimizations for ARM64 emulation
+            echo "hw.cpu.ncore=2" >> "$AVD_CONFIG_FILE"
+            echo "hw.ramSize=2048" >> "$AVD_CONFIG_FILE"
+            echo "vm.heapSize=256" >> "$AVD_CONFIG_FILE"
+            echo "hw.gpu.enabled=yes" >> "$AVD_CONFIG_FILE"
+            echo "hw.gpu.mode=swiftshader_indirect" >> "$AVD_CONFIG_FILE"
+            
+            echo "AVD configuration:"
+            cat "$AVD_CONFIG_FILE"
+          fi
           
           # Verify AVD creation
-          echo "Verifying AVD creation..."
+          echo "Available AVDs:"
           avdmanager list avd
           ls -la ~/.android/avd/ || true
-          ls -la ~/.android/avd/test_avd.avd/ || true
 
       - name: Download and Setup Custom Snapshot
         run: |
@@ -84,14 +102,16 @@ jobs:
           SNAPSHOTS_DIR="$AVD_DIR/snapshots"
           
           # Create snapshots directory
-          mkdir -p "$SNAPSHOTS_DIR"
+          mkdir -p "$SNAPSHOTS_DIR/default_boot"
           
           # Clean up any existing snapshots
           rm -rf "$SNAPSHOTS_DIR"/* || true
+          mkdir -p "$SNAPSHOTS_DIR/default_boot"
           
           # Move snapshot contents
           if [ -d "snap_2025-08-27_10-53-29" ]; then
-            mv snap_2025-08-27_10-53-29/* "$SNAPSHOTS_DIR/" || true
+            echo "Moving snapshot files..."
+            mv snap_2025-08-27_10-53-29/* "$SNAPSHOTS_DIR/default_boot/" || true
             rmdir snap_2025-08-27_10-53-29 || true
           fi
           
@@ -102,11 +122,18 @@ jobs:
           # Set permissions
           chmod -R 755 "$SNAPSHOTS_DIR" || true
           
-          # List snapshot contents for debugging
+          # Verify snapshot structure
           echo "Snapshot directory contents:"
-          ls -la "$SNAPSHOTS_DIR" || echo "Snapshot directory listing failed"
+          ls -la "$SNAPSHOTS_DIR/default_boot/" || echo "Snapshot directory listing failed"
+          
+          # Check if essential snapshot files exist
+          if [ -f "$SNAPSHOTS_DIR/default_boot/ram.bin" ] && [ -f "$SNAPSHOTS_DIR/default_boot/snapshot.pb" ]; then
+            echo "✓ Essential snapshot files found"
+          else
+            echo "⚠ Warning: Essential snapshot files may be missing"
+          fi
 
-      - name: Start Emulator with Custom Configuration
+      - name: Start ARM64 Emulator
         run: |
           set -euo pipefail
           
@@ -119,20 +146,17 @@ jobs:
           # Kill any existing emulators
           adb devices | grep emulator | cut -f1 | while read line; do adb -s $line emu kill; done || true
           
-          # Verify AVD exists before starting
-          echo "Available AVDs:"
-          avdmanager list avd || true
-          
-          echo "AVD directory contents:"
-          ls -la ~/.android/avd/ || true
-          
+          # Verify AVD exists
           if [ ! -f ~/.android/avd/test_avd.ini ]; then
             echo "ERROR: test_avd.ini not found!"
+            ls -la ~/.android/avd/ || true
             exit 1
           fi
           
-          # Start emulator in background with ARM64 optimizations
-          echo "Starting ARM64 emulator..."
+          # Start emulator with ARM64 optimizations and snapshot loading
+          echo "Starting ARM64 emulator with snapshot..."
+          
+          # Try to load with snapshot first, fallback to cold boot if it fails
           emulator -avd test_avd \
             -no-window \
             -no-audio \
@@ -144,21 +168,62 @@ jobs:
             -partition-size 2048 \
             -no-metrics \
             -qemu -smp 2 \
-            -verbose &
+            -snapshot default_boot \
+            -no-snapshot-save \
+            -verbose 2>&1 &
           
-          # Wait for device to be online (ARM64 takes longer)
-          echo "Waiting for emulator to start (ARM64 may take longer)..."
-          timeout 600 adb wait-for-device
+          EMULATOR_PID=$!
           
-          # Wait for boot to complete (ARM64 needs more time)
-          echo "Waiting for boot to complete..."
-          timeout 600 bash -c 'until [[ $(adb shell getprop sys.boot_completed) == "1" ]]; do sleep 10; done'
+          # Wait for emulator to start (ARM64 takes much longer)
+          echo "Waiting for ARM64 emulator to start (this may take 5-10 minutes)..."
           
-          # Additional wait for system to stabilize
-          sleep 60
+          # Check if emulator process is still running
+          sleep 30
+          if ! kill -0 $EMULATOR_PID 2>/dev/null; then
+            echo "Emulator process died, trying cold boot without snapshot..."
+            # Try without snapshot
+            emulator -avd test_avd \
+              -no-window \
+              -no-audio \
+              -no-boot-anim \
+              -camera-back none \
+              -camera-front none \
+              -gpu swiftshader_indirect \
+              -memory 2048 \
+              -partition-size 2048 \
+              -no-metrics \
+              -qemu -smp 2 \
+              -no-snapshot \
+              -verbose 2>&1 &
+            EMULATOR_PID=$!
+          fi
           
-          echo "Emulator started successfully!"
+          # Wait for device to be online with extended timeout
+          timeout 900 adb wait-for-device || {
+            echo "Timeout waiting for emulator device"
+            kill -9 $EMULATOR_PID || true
+            exit 1
+          }
+          
+          # Wait for boot to complete with extended timeout
+          echo "Waiting for boot to complete (ARM64 emulation is slow)..."
+          timeout 900 bash -c 'until [[ $(adb shell getprop sys.boot_completed 2>/dev/null) == "1" ]]; do 
+            echo "Boot progress: $(adb shell getprop sys.boot_completed 2>/dev/null || echo "not ready")"
+            sleep 15
+          done' || {
+            echo "Timeout waiting for boot completion"
+            adb shell getprop || true
+            kill -9 $EMULATOR_PID || true
+            exit 1
+          }
+          
+          # Additional wait for system stabilization
+          echo "Waiting for system to stabilize..."
+          sleep 90
+          
+          echo "ARM64 emulator started successfully!"
           adb devices
+          adb shell getprop ro.product.cpu.abi
 
       - name: Run Appium Tests
         run: |
@@ -174,11 +239,21 @@ jobs:
           echo "Starting Appium server..."
           appium --relaxed-security --log-level debug > appium.log 2>&1 &
           APPIUM_PID=$!
-          sleep 15
+          sleep 20
+          
+          # Verify emulator is responsive
+          echo "Verifying emulator responsiveness..."
+          adb shell input keyevent KEYCODE_MENU || {
+            echo "Emulator not responsive"
+            exit 1
+          }
           
           # Install APK
           echo "Installing APK..."
-          adb install app.apk
+          adb install app.apk || {
+            echo "Failed to install APK"
+            exit 1
+          }
           
           # Create directories for artifacts
           mkdir -p screenshots logs
@@ -186,23 +261,26 @@ jobs:
           # Dump system info for debugging
           adb shell dumpsys account > account_dump.txt || true
           
-          # Run tests with timeout
+          # Run tests with extended timeout for ARM64
           echo "Running WebDriver tests..."
           npx wdio run wdio.conf.ts | tee wdio_output.txt &
           TEST_PID=$!
           
-          # Monitor test execution with timeout
-          INTERVAL=5
-          MAX_MINUTES=35
+          # Monitor test execution with timeout (longer for ARM64)
+          INTERVAL=300  # 5 minutes
+          MAX_MINUTES=50  # Extended for ARM64
+          MAX_SECONDS=$((MAX_MINUTES * 60))
           ELAPSED=0
           
           while kill -0 $TEST_PID 2>/dev/null; do
-            sleep ${INTERVAL}m
+            sleep $INTERVAL
             ELAPSED=$((ELAPSED + INTERVAL))
-            echo "Test Elapsed: ${ELAPSED} minutes - Still running..."
+            CURRENT_MINUTES=$((ELAPSED / 60))
             
-            if [ $ELAPSED -ge $MAX_MINUTES ]; then
-              echo "Timeout: Killing test after ${MAX_MINUTES} minutes."
+            echo "Test Progress: ${CURRENT_MINUTES}/${MAX_MINUTES} minutes - Still running..."
+            
+            if [ $ELAPSED -ge $MAX_SECONDS ]; then
+              echo "Test timeout reached (${MAX_MINUTES} minutes). Terminating..."
               kill -9 $TEST_PID || true
               kill -9 $APPIUM_PID || true
               exit 1
@@ -235,7 +313,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: test-artifacts-${{ github.run_number }}
+          name: test-artifacts-arm64-${{ github.run_number }}
           path: |
             allure-results/
             emulator_logcat.txt
