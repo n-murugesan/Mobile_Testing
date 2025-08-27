@@ -1,8 +1,8 @@
 name: Appium Tests
 
 on:
-  pull_request:
-    types: [opened, synchronize, reopened]
+  push:
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref }}
@@ -19,8 +19,7 @@ jobs:
       ARCH: 'arm64-v8a'
       TARGET: 'google_apis_playstore'
       # TESTING ONLY: inline presigned URL (move to secrets later)
-      SNAPSHOT_URL: "https://emulatorsnapshots.s3.ap-south-1.amazonaws.com/snap_boot.zip?response-content-disposition=inline&X-Amz-Content-Sha256=UNSIGNED-PAYLOAD&X-Amz-Security-Token=IQoJb3JpZ2luX2VjEDIaCmFwLXNvdXRoLTEiRzBFAiEA%2FO02N%2FvAY04VIM%2BM8U8jQaUnte%2FqzBJOzmd4%2BPdkpVMCIDyTWgE5cpgxmxT6I5mOyWWwu%2BLPyOrOZLX1JzeJgqkFKsIDCIv%2F%2F%2F%2F%2F%2F%2F%2F%2F%2FwEQAxoMNDU4MzkxNzY3MTIxIgzXNDV0R%2FK%2FoxCf9k0qlgNv8qkTgqVfLtIvRo0%2Fh%2BebzvqiHLXfRw%2Fh%2F%2BGyjyeiW9ALMLMIbwXUm7JetlcgR%2FMJRq56mYOx%2FRmHFqzJD4TxQpoycJ6KsrQO3yTsPH0qarmbc08vIWm3%2BjXZKTudmZTsLJE1m14Syl76%2Bmeq%2BbN9LDoONLsv2G6N8v8oUOIpOlFLpvaIIHjEOV1ywj9HmycX%2Bw2L%2BKLUSPIoL0v5gPLQEw%2Fu0eBF%2FPsub%2B98bWoFqxZ13r2wQA%2FQXgaAk%2B4LTZzJHBjxBbdw9J2Wj%2BkQxjOUaor3dl%2BGRfJ9FVkiWELQ6OdVjmAWxpwf1ox9KmUqQVaNNRBzkhLvD%2F43YgEPyzgBDfswBXg7aU28FjJ0%2Bb0FCRMmCljnybFxHNNtnKSjN8zlTuGIVRZDiBfJgMuL%2FJ7hx%2BwvPya66SXeBT56DVgcnUvNdZcQzeaSCjRXOWPdts1GM1NxPwSyTu3887S1fwePfTK0LHfKy6u2DC3b%2BgCW%2BR6robYQMjPl4v012OuulLOzmgHGATeq456vvRIpQLyqppAqPo7wMK2dusUGOt4CsMlYP8dv5tTDcbqTbgUieJSTrv2tJBs0vGy2cBSvoK6fE0ErsjNO8Dy9vkBRi2KmiBVl4nSZ20vCNn9XC5yYatNq9fXvMwgujCRCCZi5IV4w%2FKw1%2Fc2T1kjgnur7GzTcAZrplARjphX%2B%2FQnd1xqIw1Rk%2BkDLbB%2BjVMqanRS%2FLP1VJ%2FrqjTGvUdeeJhsMkVPzlWKiKxfi6ibTu7AFjKiSOLVa6ZM4PGME4LHYohnktrptpJqInBueQqV%2BZLrS%2B5SRu5qXefinO07ovTebaOY0HiJQPUJV9SyzfqMPo2n6anB6f2CqxDVLOOoAO4vot4Xo%2FjBnTlbJqxpKDfCDzAUuXrYuKZSMwY%2FWkEU1IaboTOVqUEfj0R8UBaxiDlc7R3QmG1Qi5c9SAWa%2BI8ZsE28ahABoLgpJzDHRru2%2B2Trl%2BgNokUkoIK4790k5SZyVMCiGfewaTuj2DRM8Z9YbDGk%3D&X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=ASIAWVOSHJBI4574PBN5%2F20250827%2Fap-south-1%2Fs3%2Faws4_request&X-Amz-Date=20250827T093829Z&X-Amz-Expires=25200&X-Amz-SignedHeaders=host&X-Amz-Signature=0e6c9c89f3d3d80d2f7d09379927f937002b62914b2754594bb05508524009c5
-
+      SNAPSHOT_URL: 'https://emulatorsnapshots.s3.ap-south-1.amazonaws.com/snap_boot.zip?response-content-disposition=inline&X-Amz-Content-Sha256=UNSIGNED-PAYLOAD&X-Amz-Security-Token=IQoJb3JpZ2luX2VjEDIaCmFwLXNvdXRoLTEiRzBFAiEA%2FO02N%2FvAY04VIM%2BM8U8jQaUnte%2FqzBJOzmd4%2BPdkpVMCIDyTWgE5cpgxmxT6I5mOyWWwu%2BLPyOrOZLX1JzeJgqkFKsIDCIv%2F%2F%2F%2F%2F%2F%2F%2F%2F%2FwEQAxoMNDU4MzkxNzY3MTIxIgzXNDV0R%2FK%2FoxCf9k0qlgNv8qkTgqVfLtIvRo0%2Fh%2BebzvqiHLXfRw%2Fh%2F%2BGyjyeiW9ALMLMIbwXUm7JetlcgR%2FMJRq56mYOx%2FRmHFqzJD4TxQpoycJ6KsrQO3yTsPH0qarmbc08vIWm3%2BjXZKTudmZTsLJE1m14Syl76%2Bmeq%2BbN9LDoONLsv2G6N8v8oUOIpOlFLpvaIIHjEOV1ywj9HmycX%2Bw2L%2BKLUSPIoL0v5gPLQEw%2Fu0eBF%2FPsub%2B98bWoFqxZ13r2wQA%2FQXgaAk%2B4LTZzJHBjxBbdw9J2Wj%2BkQxjOUaor3dl%2BGRfJ9FVkiWELQ6OdVjmAWxpwf1ox9KmUqQVaNNRBzkhLvD%2F43YgEPyzgBDfswBXg7aU28FjJ0%2Bb0FCRMmCljnybFxHNNtnKSjN8zlTuGIVRZDiBfJgMuL%2FJ7hx%2BwvPya66SXeBT56DVgcnUvNdZcQzeaSCjRXOWPdts1GM1NxPwSyTu3887S1fwePfTK0LHfKy6u2DC3b%2BgCW%2BR6robYQMjPl4v012OuulLOzmgHGATeq456vvRIpQLyqppAqPo7wMK2dusUGOt4CsMlYP8dv5tTDcbqTbgUieJSTrv2tJBs0vGy2cBSvoK6fE0ErsjNO8Dy9vkBRi2KmiBVl4nSZ20vCNn9XC5yYatNq9fXvMwgujCRCCZi5IV4w%2FKw1%2Fc2T1kjgnur7GzTcAZrplARjphX%2B%2FQnd1xqIw1Rk%2BkDLbB%2BjVMqanRS%2FLP1VJ%2FrqjTGvUdeeJhsMkVPzlWKiKxfi6ibTu7AFjKiSOLVa6ZM4PGME4LHYohnktrptpJqInBueQqV%2BZLrS%2B5SRu5qXefinO07ovTebaOY0HiJQPUJV9SyzfqMPo2n6anB6f2CqxDVLOOoAO4vot4Xo%2FjBnTlbJqxpKDfCDzAUuXrYuKZSMwY%2FWkEU1IaboTOVqUEfj0R8UBaxiDlc7R3QmG1Qi5c9SAWa%2BI8ZsE28ahABoLgpJzDHRru2%2B2Trl%2BgNokUkoIK4790k5SZyVMCiGfewaTuj2DRM8Z9YbDGk%3D&X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=ASIAWVOSHJBI4574PBN5%2F20250827%2Fap-south-1%2Fs3%2Faws4_request&X-Amz-Date=20250827T093829Z&X-Amz-Expires=25200&X-Amz-SignedHeaders=host&X-Amz-Signature=0e6c9c89f3d3d80d2f7d09379927f937002b62914b2754594bb05508524009c5'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
