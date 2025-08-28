@@ -56,7 +56,7 @@ export const config: WebdriverIO.Config = {
         'platformName': 'Android',
         // 'browserName': 'Chrome',
         'appium:browserName': 'Chrome',
-        'goog:chromeOptions': { args: ['--disable-fre', '--no-first-run'] }
+        'goog:chromeOptions': { args: ['--disable-fre', '--no-first-run'] },
         'appium:deviceName': 'emulator-5554',
         'appium:platformVersion': '15.0',
         'appium:automationName': 'UiAutomator2',
