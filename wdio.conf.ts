@@ -55,6 +55,11 @@ export const config: WebdriverIO.Config = {
         // capabilities for local Appium web tests on an Android Emulator
         'platformName': 'Android',
         // 'browserName': 'Chrome',
+        'browserName': 'Chrome',
+        'chromeOptions': {
+            'w3c': False,
+            'args': [ '--disable-fre' ]
+         }
         'appium:deviceName': 'emulator-5554',
         'appium:platformVersion': '15.0',
         'appium:automationName': 'UiAutomator2',
