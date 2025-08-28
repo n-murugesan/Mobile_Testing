@@ -50,14 +50,6 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
 
-      # Restore previously saved AVD (keeps state & speeds boot)
-      - name: Restore AVD (if exists)
-        uses: actions/download-artifact@v4
-        with:
-          name: ${{ env.AVD_NAME }}-bundle
-          path: ~/.android/avd/
-        continue-on-error: true
-
       # Ensure SDK + AVD exist (create only if not restored)
       - name: Install SDK packages & ensure AVD exists
         shell: bash
@@ -147,12 +139,3 @@ jobs:
             screenshot.png
             appium.log
 
-      # Persist the AVD so future runs keep state & Quick Boot
-      - name: Save AVD for reuse
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ env.AVD_NAME }}-bundle
-          path: |
-            ~/.android/avd/${{ env.AVD_NAME }}.avd
-            ~/.android/avd/${{ env.AVD_NAME }}.ini
