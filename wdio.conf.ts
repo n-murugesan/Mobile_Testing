@@ -59,7 +59,7 @@ export const config: WebdriverIO.Config = {
         'chromeOptions': {
             'w3c': False,
             'args': [ '--disable-fre' ]
-         }
+         },
         'appium:deviceName': 'emulator-5554',
         'appium:platformVersion': '15.0',
         'appium:automationName': 'UiAutomator2',
