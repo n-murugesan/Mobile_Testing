@@ -57,7 +57,7 @@ export const config: WebdriverIO.Config = {
         // 'browserName': 'Chrome',
         'browserName': 'Chrome',
         'chromeOptions': {
-            'w3c': 'False',
+            'w3c': false,
             'args': [ '--disable-fre' ]
          },
         'appium:deviceName': 'emulator-5554',
