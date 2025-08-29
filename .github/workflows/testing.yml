@@ -1,5 +1,4 @@
 name: Appium Emulator CI (API 35 Google Play x86_64)
-
 on:
   push:
   workflow_dispatch:
@@ -8,7 +7,6 @@ jobs:
   e2e:
     runs-on: ubuntu-latest
     timeout-minutes: 75
-
     env:
       # Android / AVD
       AVD_NAME: api35-x86_64-play
@@ -17,7 +15,6 @@ jobs:
       ANDROID_HOME: /usr/local/lib/android/sdk
       ANDROID_AVD_HOME: /home/runner/.android/avd
       ANDROID_EMULATOR_WAIT_TIME_BEFORE_KILL: 60
-
       # (TEMP) Google creds if your tests read these envs.
       # Move to GitHub Secrets ASAP.
       GOOGLE_EMAIL: "ashish.prasad@alvaria.com"
@@ -57,16 +54,13 @@ jobs:
           set -euxo pipefail
           mkdir -p "$HOME/.android" "$ANDROID_AVD_HOME"
           : > "$HOME/.android/repositories.cfg"
-
           # Accept licenses (avoid SIGPIPE non-zero)
           set +o pipefail
           yes | "$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null
           set -o pipefail
-
           "$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --install \
             "platform-tools" "platforms;android-35" "emulator" \
             "system-images;android-35;google_apis_playstore;x86_64"
-
           AVD_DIR="$ANDROID_AVD_HOME/${AVD_NAME}.avd"
           if [ ! -d "$AVD_DIR" ]; then
             echo "Creating AVD: $AVD_NAME"
@@ -84,9 +78,9 @@ jobs:
         env:
           ANDROID_EMULATOR_WAIT_TIME_BEFORE_KILL: 60
         with:
-          avd-name: ${{ env.AVD_NAME }}           # use the same AVD you save/restore
+          avd-name: ${{ env.AVD_NAME }}
           api-level: 35
-          target: google_apis_playstore           # Play image for Google sign-in
+          target: google_apis_playstore
           arch: x86_64
           ram-size: 2048M
           disk-size: 2048M
@@ -94,38 +88,71 @@ jobs:
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           disable-animations: true
           script: |
-            set -ex
+            set -euxo pipefail
+
+            # --- Wait for boot ---
             adb wait-for-device
             until adb shell getprop sys.boot_completed 2>/dev/null | grep -q "1"; do sleep 1; done
             until adb shell dumpsys window 2>/dev/null | grep -q mCurrentFocus; do sleep 1; done
+
+            # --- General hardening / speed ---
             adb shell settings put global window_animation_scale 0
             adb shell settings put global transition_animation_scale 0
             adb shell settings put global animator_duration_scale 0
+
+            # Mark the device provisioned to bypass any setup wizards
+            adb shell settings put global device_provisioned 1
+            adb shell settings put secure user_setup_complete 1
+
+            # Aggressively disable setup wizards if present (package names vary by image)
+            adb shell pm disable-user --user 0 com.google.android.setupwizard || true
+            adb shell pm disable-user --user 0 com.android.provision || true
+            adb shell pm disable-user --user 0 com.android.setupwizard || true
+
+            # Reduce Play Protect / verifier nags
             adb shell settings put global package_verifier_enable 0 || true
             adb shell settings put global verifier_verify_adb_installs 0 || true
-            adb shell 'printf "chrome --disable-fre --no-first-run --no-default-browser-check --disable-search-engine-choice-screen\n" > /data/local/tmp/chrome-command-line'
-            adb shell am force-stop com.android.chrome || true
+
+            # Set Chrome as the default browser role (Android 10+/API 29+)
+            adb shell cmd role add-role-holder android.app.role.BROWSER com.android.chrome 0 || true
+
+            # Seed Chrome flags system-wide so even native apps that warm up Chrome skip FRE
+            adb shell 'echo "chrome --disable-fre --no-first-run --no-default-browser-check --disable-search-engine-choice-screen" > /data/local/tmp/chrome-command-line'
+            adb shell chmod 644 /data/local/tmp/chrome-command-line
+            adb shell chown shell:shell /data/local/tmp/chrome-command-line
+
+            # Nuke any existing Chrome state; then start and stop once so flags take effect
             adb shell pm clear com.android.chrome || true
-            adb shell monkey -p com.android.chrome -c android.intent.category.LAUNCHER 1
+            adb shell am force-stop com.android.chrome || true
+            adb shell monkey -p com.android.chrome -c android.intent.category.LAUNCHER 1 || true
             sleep 3
             adb shell am force-stop com.android.chrome || true
-            adb shell getprop ro.product.cpu.abi
-            adb shell getprop ro.build.version.sdk
+
+            # Double-check a few device props (debug aid)
+            adb shell getprop ro.product.cpu.abi || true
+            adb shell getprop ro.build.version.sdk || true
+
+            # --- Appium + tests ---
             npm i -g appium@2.6.0
-            appium driver list --installed || true
+            appium driver install uiautomator2 || true
             appium --relaxed-security > appium.log 2>&1 &
             APP_PID=$!
             sleep 8
+
+            # Install your app if present
             if [ -f app.apk ]; then adb install -r app.apk || true; fi
-            adb devices > emulator_logcat.txt
-            adb shell dumpsys window | grep mCurrentFocus >> emulator_logcat.txt || true
-            npx wdio run wdio.conf.ts | tee wdio_output.txt
+
+            # Run WDIO
+            npx wdio run wdio.conf.ts | tee wdio_output.txt || true
+
+            # Collect artifacts
             adb shell screencap /sdcard/screenshot.png || true
             adb pull /sdcard/screenshot.png ./screenshot.png || true
-            adb logcat -d >> emulator_logcat.txt || true
+            adb logcat -d > emulator_logcat.txt || true
+
+            # Teardown
             kill $APP_PID || true
             adb -s emulator-5554 emu kill || true
-
 
       - name: Upload Test Artifacts
         if: always()
@@ -138,4 +165,3 @@ jobs:
             wdio_output.txt
             screenshot.png
             appium.log
-
