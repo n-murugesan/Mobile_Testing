@@ -87,8 +87,7 @@ export class LoginPage {
         catch (err) {
             console.error('Diagnostic capture failed: ', err);
           }
-      await this.inputs.value1().waitForDisplayed({timeout:30000});
-      await this.inputs.value1().click();
+      const screenshota = await browser.takeScreenshot();
       console.log("Clicked on Login button in the new screen");
       await this.inputs.accountTxtBox().waitForDisplayed({timeout: 30000 });
       await this.inputs.accountTxtBox().setValue(process.env.Account_Val!);
