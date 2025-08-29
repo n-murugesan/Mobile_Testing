@@ -65,14 +65,15 @@ export const config: WebdriverIO.Config = {
     // }],
 
     capabilities: [{
-      platformName: 'Android',
-      'appium:automationName': 'UiAutomator2',
-      'appium:deviceName': 'emulator-5554',
-      'appium:platformVersion': '15.0',
-      'appium:app': 'app.apk',
-      'appium:autoGrantPermissions': true
-      // (no goog:chromeOptions here — handled by ADB in the workflow)
-    }] as const;,
+        platformName: 'Android',
+        'appium:automationName': 'UiAutomator2',
+        'appium:deviceName': 'emulator-5554',
+        'appium:platformVersion': '15.0',
+        'appium:app': 'app.apk',
+        'appium:autoGrantPermissions': true
+        // (no goog:chromeOptions here — handled by ADB in the workflow)
+  }] as const,  // <-- No semicolon here
+
 
 
     hostname:'127.0.0.1',
