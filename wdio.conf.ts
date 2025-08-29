@@ -51,18 +51,29 @@ export const config: WebdriverIO.Config = {
     // Sauce Labs platform configurator - a great tool to configure your capabilities:
     // https://saucelabs.com/platform/platform-configurator
     //
+    // capabilities: [{
+    //     // capabilities for local Appium web tests on an Android Emulator
+    //     'platformName': 'Android',
+    //     // 'browserName': 'Chrome',
+    //     'appium:deviceName': 'emulator-5554',
+    //     'appium:platformVersion': '15.0',
+    //     'appium:automationName': 'UiAutomator2',
+    //     'appium:app': 'app.apk',
+    //     'appium:autoGrantPermissions': true,
+    //     // 'appium:avd': 'Pixel_9_Pro',
+    //     "port":4723
+    // }],
+
     capabilities: [{
-        // capabilities for local Appium web tests on an Android Emulator
-        'platformName': 'Android',
-        // 'browserName': 'Chrome',
-        'appium:deviceName': 'emulator-5554',
-        'appium:platformVersion': '15.0',
-        'appium:automationName': 'UiAutomator2',
-        'appium:app': 'app.apk',
-        'appium:autoGrantPermissions': true,
-        // 'appium:avd': 'Pixel_9_Pro',
-        "port":4723
-    }],
+      platformName: 'Android',
+      'appium:automationName': 'UiAutomator2',
+      'appium:deviceName': 'emulator-5554',
+      'appium:platformVersion': '15.0',
+      'appium:app': 'app.apk',
+      'appium:autoGrantPermissions': true
+      // (no goog:chromeOptions here — handled by ADB in the workflow)
+    }] as const;,
+
 
     hostname:'127.0.0.1',
     port:4723,
