@@ -1,4 +1,4 @@
-name: Appium Emulator CI (API 35 Google Play x86_64)
+name: Appium Emulator CI (API 35 Google APIs x86_64)
 
 on:
   push:
@@ -10,9 +10,7 @@ jobs:
     timeout-minutes: 75
 
     env:
-      # Android / AVD
-      AVD_NAME: api35-x86_64-play
-      SDK_ROOT: /usr/local/lib/android/sdk
+      # Android SDK locations (used by the emulator runner)
       ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
       ANDROID_HOME: /usr/local/lib/android/sdk
       ANDROID_AVD_HOME: /home/runner/.android/avd
@@ -31,10 +29,10 @@ jobs:
       - name: Set up Node 22.x
         uses: actions/setup-node@v4
         with:
-          node-version: "22.16.0"
+          node-version: "22.x"
           cache: npm
 
-      - name: Install Node deps (if present)
+      - name: Install Node deps
         run: |
           if [ -f package-lock.json ]; then
             npm ci
@@ -42,118 +40,79 @@ jobs:
             npm i
           fi
 
-      # Hardware acceleration on Ubuntu runners
+      # KVM permissions (helps emulator boot speed/stability)
       - name: Enable KVM group perms
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
 
-      # Ensure SDK + AVD exist (create only if not already present)
-      - name: Install SDK packages & ensure AVD exists
-        shell: bash
-        run: |
-          set -euxo pipefail
-          mkdir -p "$HOME/.android" "$ANDROID_AVD_HOME"
-          : > "$HOME/.android/repositories.cfg"
-
-          # Accept licenses (avoid non-zero on SIGPIPE)
-          set +o pipefail
-          yes | "$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null
-          set -o pipefail
-
-          "$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --install \
-            "platform-tools" "platforms;android-35" "emulator" \
-            "system-images;android-35;google_apis_playstore;x86_64"
-
-          AVD_DIR="$ANDROID_AVD_HOME/${AVD_NAME}.avd"
-          if [ ! -d "$AVD_DIR" ]; then
-            echo "Creating AVD: $AVD_NAME"
-            echo "no" | "$SDK_ROOT/cmdline-tools/latest/bin/avdmanager" create avd \
-              --force -n "$AVD_NAME" \
-              --package "system-images;android-35;google_apis_playstore;x86_64" \
-              --abi "google_apis_playstore/x86_64"
-            # modest cores keeps boot reliable on shared CI
-            printf 'hw.cpu.ncore=3\n' >> "$AVD_DIR/config.ini"
-          else
-            echo "AVD already present at $AVD_DIR (restored or pre-existing)."
-          fi
-
-      - name: Run Appium Tests on Emulator
+      - name: Run Appium tests on Emulator (API 35 google_apis)
         uses: reactivecircus/android-emulator-runner@v2
-        env:
-          ANDROID_EMULATOR_WAIT_TIME_BEFORE_KILL: 60
         with:
-          avd-name: ${{ env.AVD_NAME }}
+          # Create a fresh AVD on google_apis (no Play Store => no Google sign-in nags)
+          avd-name: api35-x86_64-ga
           api-level: 35
-          target: google_apis_playstore
+          target: google_apis
           arch: x86_64
           ram-size: 2048M
           disk-size: 2048M
-          force-avd-creation: false
+          force-avd-creation: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           disable-animations: true
+
+          # Your whole test script
           script: |
             set -ex
 
-            # --- Wait until fully booted ---
+            # Wait for full boot & window manager ready
             adb wait-for-device
             until adb shell getprop sys.boot_completed 2>/dev/null | grep -q "1"; do sleep 1; done
             until adb shell dumpsys window 2>/dev/null | grep -q mCurrentFocus; do sleep 1; done
 
-            # --- Mark device as provisioned (avoid setup) ---
+            # Mark device as provisioned (avoids first-run nags on non-Play images too)
             adb shell settings put global device_provisioned 1 || true
             adb shell settings put secure user_setup_complete 1 || true
 
-            # --- Best effort: disable setup/provision components if present ---
-            adb shell cmd package list packages com.google.android.setupwizard | grep -q com.google.android.setupwizard && adb shell pm disable-user --user 0 com.google.android.setupwizard || true
-            adb shell cmd package list packages com.android.provision            | grep -q com.android.provision            && adb shell pm disable-user --user 0 com.android.provision            || true
-            adb shell cmd package list packages com.android.managedprovisioning  | grep -q com.android.managedprovisioning  && adb shell pm disable-user --user 0 com.android.managedprovisioning  || true
-            adb shell cmd package list packages com.android.onetimeinitializer   | grep -q com.android.onetimeinitializer   && adb shell pm disable-user --user 0 com.android.onetimeinitializer   || true
-
-            # --- Kill animations & verifiers (belt & braces) ---
+            # Belt-and-braces: ensure animations are off
             adb shell settings put global window_animation_scale 0 || true
             adb shell settings put global transition_animation_scale 0 || true
             adb shell settings put global animator_duration_scale 0 || true
-            adb shell settings put global package_verifier_enable 0 || true
-            adb shell settings put global verifier_verify_adb_installs 0 || true
 
-            # --- Chrome: disable first-run + search engine choice ---
-            adb shell 'printf "chrome --disable-fre --no-first-run --no-default-browser-check --disable-search-engine-choice-screen --disable-site-isolation-trials\n" > /data/local/tmp/chrome-command-line' || true
+            # So Chrome won't prompt first-run / default browser / SE choice
+            adb shell 'echo "chrome --disable-fre --no-first-run --no-default-browser-check --disable-search-engine-choice-screen --disable-site-isolation-trials" > /data/local/tmp/chrome-command-line' || true
 
-            # Force-stop & clear so flags are read on next launch
+            # Clean & warm Chrome once (some apps open custom tabs)
             adb shell am force-stop com.android.chrome || true
             adb shell pm clear com.android.chrome || true
-
-            # Grant notifications on Android 13+ if package exists
-            adb shell cmd package list packages com.android.chrome | grep -q com.android.chrome && adb shell pm grant com.android.chrome android.permission.POST_NOTIFICATIONS || true
-
-            # Touch Chrome once so it bakes the flags, then close
+            adb shell cmd package list packages com.android.chrome | grep -q com.android.chrome && \
+              adb shell pm grant com.android.chrome android.permission.POST_NOTIFICATIONS || true
             adb shell monkey -p com.android.chrome -c android.intent.category.LAUNCHER 1 || true
             sleep 2
             adb shell am force-stop com.android.chrome || true
 
-            # --- Appium & tests ---
+            # Install your app if present
+            if [ -f app.apk ]; then
+              adb install -r app.apk || true
+            fi
+
+            # Start Appium + UiAutomator2 and run WDIO
             npm i -g appium@2.6.0
             appium driver install uiautomator2 || true
 
-            # Install AUT if provided in repo
-            [ -f app.apk ] && adb install -r app.apk || true
-
-            # Start Appium server
             appium --relaxed-security > appium.log 2>&1 &
             APP_PID=$!
             sleep 6
 
-            # Run WDIO (TypeScript config)
+            # Run your WDIO suite
             npx wdio run wdio.conf.ts | tee wdio_output.txt
 
-            # Artifacts
+            # Collect a quick screenshot + logs
             adb shell screencap /sdcard/screenshot.png || true
             adb pull /sdcard/screenshot.png ./screenshot.png || true
             adb logcat -d > emulator_logcat.txt || true
 
-            # Teardown
+            # Cleanup
             kill $APP_PID || true
             adb -s emulator-5554 emu kill || true
 
