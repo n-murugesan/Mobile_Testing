@@ -1,120 +1,110 @@
-name: Appium Emulator CI (API 35 Google APIs x86_64)
+name: Appium Tests (GitHub Actions with Emulator)
 
 on:
   push:
   workflow_dispatch:
 
 jobs:
-  e2e:
+  appium-emulator-test:
     runs-on: ubuntu-latest
-    timeout-minutes: 75
-
-    env:
-      # Android SDK locations (used by the emulator runner)
-      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
-      ANDROID_HOME: /usr/local/lib/android/sdk
-      ANDROID_AVD_HOME: /home/runner/.android/avd
-      ANDROID_EMULATOR_WAIT_TIME_BEFORE_KILL: 60
+    timeout-minutes: 30  
 
     steps:
-      - name: Checkout
+      - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Set up Java 17
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "17"
-
-      - name: Set up Node 22.x
+      - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "22.x"
-          cache: npm
+          node-version: '22.16.0'
 
-      - name: Install Node deps
+      - name: Verify Node.js Version
         run: |
-          if [ -f package-lock.json ]; then
-            npm ci
-          elif [ -f package.json ]; then
-            npm i
-          fi
+          node -v
+          npm -v
 
-      # KVM permissions (helps emulator boot speed/stability)
-      - name: Enable KVM group perms
+      - name: Install NPM Dependencies
+        run: npm ci
+
+      - name: List all files in current directory
+        run: ls -alR
+
+      - name: Enable KVM for Hardware Acceleration
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
 
-      - name: Run Appium tests on Emulator (API 35 google_apis)
+      - name: Cache AVD Snapshot
+        uses: actions/cache@v4
+        id: avd-cache
+        with:
+          path: |
+            ~/.android/avd/*
+            ~/.android/adb*
+          key: avd-35  
+
+      - name: Debug SDK Packages (if cache miss)
+        if: steps.avd-cache.outputs.cache-hit != 'true'
+        run: |
+          sdkmanager --list | grep system-images || true
+        continue-on-error: true
+
+      - name: Create AVD Snapshot (if not cached)
+        if: steps.avd-cache.outputs.cache-hit != 'true'
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          # Create a fresh AVD on google_apis (no Play Store => no Google sign-in nags)
-          avd-name: api35-x86_64-ga
-          api-level: 35
+          api-level: 35 
           target: google_apis
           arch: x86_64
           ram-size: 2048M
           disk-size: 2048M
-          force-avd-creation: true
-          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          force-avd-creation: false
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           disable-animations: true
+          script: echo "Generated AVD snapshot for caching."
 
-          # Your whole test script
+      - name: Run Appium Tests on Emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        env:
+          ANDROID_EMULATOR_WAIT_TIME_BEFORE_KILL: 90  
+        with:
+          api-level: 35  
+          target: google_apis
+          arch: x86_64
+          ram-size: 2048M
+          disk-size: 2048M
+          force-avd-creation: false
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          disable-animations: true
           script: |
-            set -ex
+            set -e  # Exit on any error
 
-            # Wait for full boot & window manager ready
+            # Install Appium
+            npm install -g appium@2.6.0
+
+            # Verify UiAutomator2 driver is available
+            appium driver list --installed
+
+            # Start Appium server in background
+            appium --relaxed-security &  # Relaxed for CI
+            sleep 10  # Wait for Appium to start
+
+            # Wait for emulator to be fully booted
             adb wait-for-device
-            until adb shell getprop sys.boot_completed 2>/dev/null | grep -q "1"; do sleep 1; done
-            until adb shell dumpsys window 2>/dev/null | grep -q mCurrentFocus; do sleep 1; done
+            adb shell 'while [[ -z $(getprop sys.boot_completed) ]]; do sleep 1; done;'
 
-            # Mark device as provisioned (avoids first-run nags on non-Play images too)
-            adb shell settings put global device_provisioned 1 || true
-            adb shell settings put secure user_setup_complete 1 || true
+            # Verify emulator is detected
+            adb devices >> emulator_logcat.txt
 
-            # Belt-and-braces: ensure animations are off
-            adb shell settings put global window_animation_scale 0 || true
-            adb shell settings put global transition_animation_scale 0 || true
-            adb shell settings put global animator_duration_scale 0 || true
+            # Install the APK
+            adb install app.apk
 
-            # So Chrome won't prompt first-run / default browser / SE choice
-            adb shell 'echo "chrome --disable-fre --no-first-run --no-default-browser-check --disable-search-engine-choice-screen --disable-site-isolation-trials" > /data/local/tmp/chrome-command-line' || true
-
-            # Clean & warm Chrome once (some apps open custom tabs)
-            adb shell am force-stop com.android.chrome || true
-            adb shell pm clear com.android.chrome || true
-            adb shell cmd package list packages com.android.chrome | grep -q com.android.chrome && \
-              adb shell pm grant com.android.chrome android.permission.POST_NOTIFICATIONS || true
-            adb shell monkey -p com.android.chrome -c android.intent.category.LAUNCHER 1 || true
-            sleep 2
-            adb shell am force-stop com.android.chrome || true
-
-            # Install your app if present
-            if [ -f app.apk ]; then
-              adb install -r app.apk || true
-            fi
-
-            # Start Appium + UiAutomator2 and run WDIO
-            npm i -g appium@2.6.0
-            appium driver install uiautomator2 || true
-
-            appium --relaxed-security > appium.log 2>&1 &
-            APP_PID=$!
-            sleep 6
-
-            # Run your WDIO suite
+            # Run WDIO tests and capture output
             npx wdio run wdio.conf.ts | tee wdio_output.txt
 
-            # Collect a quick screenshot + logs
-            adb shell screencap /sdcard/screenshot.png || true
-            adb pull /sdcard/screenshot.png ./screenshot.png || true
-            adb logcat -d > emulator_logcat.txt || true
-
-            # Cleanup
-            kill $APP_PID || true
-            adb -s emulator-5554 emu kill || true
+            # Collect logs for debugging
+            adb logcat -d >> emulator_logcat.txt || true
 
       - name: Upload Test Artifacts
         if: always()
@@ -125,5 +115,3 @@ jobs:
             allure-results/
             emulator_logcat.txt
             wdio_output.txt
-            screenshot.png
-            appium.log
