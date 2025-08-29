@@ -53,28 +53,22 @@ export const config: WebdriverIO.Config = {
     //
    // wdio.conf.ts (only the capabilities section shown)
     capabilities: [{
-      platformName: 'Android',
-      // If you run *web* tests, uncomment one of these:
-      // browserName: 'Chrome',
-      // 'appium:browserName': 'Chrome',
-      'goog:chromeOptions': {
-        // Works for both web sessions and when Chrome is launched by the app
-        args: [
-          '--disable-fre',                       // skip first-run
-          '--no-first-run',
-          '--no-default-browser-check',
-          '--disable-search-engine-choice-screen'
-        ]
-      },
-      'appium:deviceName': 'emulator-5554',
-      'appium:platformVersion': '15.0',
-      'appium:automationName': 'UiAutomator2',
-      'appium:app': 'app.apk',
-      'appium:autoGrantPermissions': true,
-      // (optional) keeps app running across sessions to avoid extra prompts
-      'appium:dontStopAppOnReset': true
-    }],
-
+  platformName: 'Android',
+  'appium:automationName': 'UiAutomator2',
+  'appium:deviceName': 'emulator-5554',
+  'appium:platformVersion': '15.0',
+  'appium:app': 'app.apk',
+  'appium:autoGrantPermissions': true,
+  'appium:autoAcceptAlerts': true,      // auto-dismiss system alerts
+  'goog:chromeOptions': {
+    args: [
+      '--disable-fre',
+      '--no-first-run',
+      '--no-default-browser-check',
+      '--disable-search-engine-choice-screen'
+    ]
+  }
+}],
 
     hostname:'127.0.0.1',
     port:4723,
