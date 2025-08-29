@@ -51,20 +51,30 @@ export const config: WebdriverIO.Config = {
     // Sauce Labs platform configurator - a great tool to configure your capabilities:
     // https://saucelabs.com/platform/platform-configurator
     //
+   // wdio.conf.ts (only the capabilities section shown)
     capabilities: [{
-        // capabilities for local Appium web tests on an Android Emulator
-        'platformName': 'Android',
-        // 'browserName': 'Chrome',
-        // 'appium:browserName': 'Chrome',
-        'goog:chromeOptions': { args: ['--disable-fre', '--no-first-run'] },
-        'appium:deviceName': 'emulator-5554',
-        'appium:platformVersion': '15.0',
-        'appium:automationName': 'UiAutomator2',
-        'appium:app': 'app.apk',
-        'appium:autoGrantPermissions': true,
-        // 'appium:avd': 'Pixel_9_Pro',
-        "port":4723
+      platformName: 'Android',
+      // If you run *web* tests, uncomment one of these:
+      // browserName: 'Chrome',
+      // 'appium:browserName': 'Chrome',
+      'goog:chromeOptions': {
+        // Works for both web sessions and when Chrome is launched by the app
+        args: [
+          '--disable-fre',                       // skip first-run
+          '--no-first-run',
+          '--no-default-browser-check',
+          '--disable-search-engine-choice-screen'
+        ]
+      },
+      'appium:deviceName': 'emulator-5554',
+      'appium:platformVersion': '15.0',
+      'appium:automationName': 'UiAutomator2',
+      'appium:app': 'app.apk',
+      'appium:autoGrantPermissions': true,
+      // (optional) keeps app running across sessions to avoid extra prompts
+      'appium:dontStopAppOnReset': true
     }],
+
 
     hostname:'127.0.0.1',
     port:4723,
