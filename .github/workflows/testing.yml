@@ -2,7 +2,6 @@ name: Appium Emulator CI (API 35 Google Play x86_64)
 on:
   push:
   workflow_dispatch:
-
 jobs:
   e2e:
     runs-on: ubuntu-latest
@@ -19,34 +18,28 @@ jobs:
       # Move to GitHub Secrets ASAP.
       GOOGLE_EMAIL: "ashish.prasad@alvaria.com"
       GOOGLE_PASSWORD: "Goodsheep66$$"
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
       - name: Set up Java 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "17"
-
       - name: Set up Node 22.x
         uses: actions/setup-node@v4
         with:
           node-version: "22.16.0"
           cache: npm
-
       - name: Install Node deps (if present)
         run: |
           if [ -f package-lock.json ]; then npm ci; elif [ -f package.json ]; then npm i; fi
-
       # Hardware acceleration on Ubuntu
       - name: Enable KVM group perms
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
-
       # Ensure SDK + AVD exist (create only if not restored)
       - name: Install SDK packages & ensure AVD exists
         shell: bash
@@ -72,7 +65,6 @@ jobs:
           else
             echo "AVD already present at $AVD_DIR (restored)."
           fi
-
       - name: Run Appium Tests on Emulator
         uses: reactivecircus/android-emulator-runner@v2
         env:
@@ -85,75 +77,80 @@ jobs:
           ram-size: 2048M
           disk-size: 2048M
           force-avd-creation: false
-          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           disable-animations: true
+          emulator-boot-timeout: 900000     # 15 min; helps avoid offline flakiness on cold boots
+          emulator-options: >-
+            -no-window
+            -gpu swiftshader_indirect
+            -noaudio
+            -no-boot-anim
+            -camera-back none
+            -no-snapshot
+            -no-snapshot-save
           script: |
-            set -euxo pipefail
+            # Run the whole thing under bash so we can use 'pipefail'
+            bash -lc '
+              set -euxo pipefail
 
-            # --- Wait for boot ---
-            adb wait-for-device
-            until adb shell getprop sys.boot_completed 2>/dev/null | grep -q "1"; do sleep 1; done
-            until adb shell dumpsys window 2>/dev/null | grep -q mCurrentFocus; do sleep 1; done
+              # --- Wait for boot ---
+              adb wait-for-device
+              until adb shell getprop sys.boot_completed 2>/dev/null | grep -q "1"; do sleep 1; done
+              until adb shell dumpsys window 2>/dev/null | grep -q mCurrentFocus; do sleep 1; done
 
-            # --- General hardening / speed ---
-            adb shell settings put global window_animation_scale 0
-            adb shell settings put global transition_animation_scale 0
-            adb shell settings put global animator_duration_scale 0
+              # --- General hardening / speed ---
+              adb shell settings put global window_animation_scale 0 || true
+              adb shell settings put global transition_animation_scale 0 || true
+              adb shell settings put global animator_duration_scale 0 || true
 
-            # Mark the device provisioned to bypass any setup wizards
-            adb shell settings put global device_provisioned 1
-            adb shell settings put secure user_setup_complete 1
+              # Mark the device provisioned to bypass any setup wizards
+              adb shell settings put global device_provisioned 1 || true
+              adb shell settings put secure user_setup_complete 1 || true
 
-            # Aggressively disable setup wizards if present (package names vary by image)
-            adb shell pm disable-user --user 0 com.google.android.setupwizard || true
-            adb shell pm disable-user --user 0 com.android.provision || true
-            adb shell pm disable-user --user 0 com.android.setupwizard || true
+              # Aggressively disable setup wizards if present
+              adb shell pm disable-user --user 0 com.google.android.setupwizard || true
+              adb shell pm disable-user --user 0 com.android.provision || true
+              adb shell pm disable-user --user 0 com.android.setupwizard || true
 
-            # Reduce Play Protect / verifier nags
-            adb shell settings put global package_verifier_enable 0 || true
-            adb shell settings put global verifier_verify_adb_installs 0 || true
+              # Reduce Play Protect / verifier nags
+              adb shell settings put global package_verifier_enable 0 || true
+              adb shell settings put global verifier_verify_adb_installs 0 || true
 
-            # Set Chrome as the default browser role (Android 10+/API 29+)
-            adb shell cmd role add-role-holder android.app.role.BROWSER com.android.chrome 0 || true
+              # Set Chrome as default browser role (best-effort)
+              adb shell cmd role add-role-holder android.app.role.BROWSER com.android.chrome 0 || true
 
-            # Seed Chrome flags system-wide so even native apps that warm up Chrome skip FRE
-            adb shell 'echo "chrome --disable-fre --no-first-run --no-default-browser-check --disable-search-engine-choice-screen" > /data/local/tmp/chrome-command-line'
-            adb shell chmod 644 /data/local/tmp/chrome-command-line
-            adb shell chown shell:shell /data/local/tmp/chrome-command-line
+              # Seed Chrome flags to skip first-run
+              adb shell "echo \"chrome --disable-fre --no-first-run --no-default-browser-check --disable-search-engine-choice-screen\" > /data/local/tmp/chrome-command-line" || true
+              adb shell chmod 644 /data/local/tmp/chrome-command-line || true
+              adb shell chown shell:shell /data/local/tmp/chrome-command-line || true
 
-            # Nuke any existing Chrome state; then start and stop once so flags take effect
-            adb shell pm clear com.android.chrome || true
-            adb shell am force-stop com.android.chrome || true
-            adb shell monkey -p com.android.chrome -c android.intent.category.LAUNCHER 1 || true
-            sleep 3
-            adb shell am force-stop com.android.chrome || true
+              adb shell pm clear com.android.chrome || true
+              adb shell am force-stop com.android.chrome || true
+              adb shell monkey -p com.android.chrome -c android.intent.category.LAUNCHER 1 || true
+              sleep 3
+              adb shell am force-stop com.android.chrome || true
 
-            # Double-check a few device props (debug aid)
-            adb shell getprop ro.product.cpu.abi || true
-            adb shell getprop ro.build.version.sdk || true
+              # --- Appium + tests ---
+              npm i -g appium@2.6.0
+              appium driver install uiautomator2 || true
+              appium --relaxed-security > appium.log 2>&1 &
+              APP_PID=$!
+              sleep 8
 
-            # --- Appium + tests ---
-            npm i -g appium@2.6.0
-            appium driver install uiautomator2 || true
-            appium --relaxed-security > appium.log 2>&1 &
-            APP_PID=$!
-            sleep 8
+              # Install your app if present
+              if [ -f app.apk ]; then adb install -r app.apk || true; fi
 
-            # Install your app if present
-            if [ -f app.apk ]; then adb install -r app.apk || true; fi
+              # Run WDIO
+              npx wdio run wdio.conf.ts | tee wdio_output.txt || true
 
-            # Run WDIO
-            npx wdio run wdio.conf.ts | tee wdio_output.txt || true
+              # Collect artifacts
+              adb shell screencap /sdcard/screenshot.png || true
+              adb pull /sdcard/screenshot.png ./screenshot.png || true
+              adb logcat -d > emulator_logcat.txt || true
 
-            # Collect artifacts
-            adb shell screencap /sdcard/screenshot.png || true
-            adb pull /sdcard/screenshot.png ./screenshot.png || true
-            adb logcat -d > emulator_logcat.txt || true
-
-            # Teardown
-            kill $APP_PID || true
-            adb -s emulator-5554 emu kill || true
-
+              # Teardown
+              kill $APP_PID || true
+              adb -s emulator-5554 emu kill || true
+            '
       - name: Upload Test Artifacts
         if: always()
         uses: actions/upload-artifact@v4
