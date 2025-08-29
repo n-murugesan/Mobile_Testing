@@ -3,7 +3,7 @@ import { TIMEOUT } from 'dns';
 import 'dotenv/config';
 
 type Inputs = {
-  accountTxtBox: () => ChainablePromiseElement;
+  accountTxtBox: ChainablePromiseElement;
   email:() =>  ChainablePromiseElement;
   password: () => ChainablePromiseElement;
   value1: () => ChainablePromiseElement;
@@ -31,7 +31,7 @@ export class LoginPage {
 
   constructor() {
     this.inputs = {
-      accountTxtBox: () => $('android =new UiSelector().className("android.widget.EditText")'),
+      accountTxtBox: () => $('//android.widget.EditText'),
       email: ()=> $('//android.widget.EditText[@resource-id="email-form-item"]'),
       password: () => $('//android.widget.EditText[@resource-id="password-form-item"]'),
       value1 : () => $('android=new UiSelector().text("Login")')
@@ -88,8 +88,9 @@ export class LoginPage {
             console.error('Diagnostic capture failed: ', err);
           }
       const screenshota = await browser.takeScreenshot();
-      console.log("Clicked on Login button in the new screen");
       await this.inputs.accountTxtBox().waitForDisplayed({timeout: 30000 });
+      await this.inputs.accountTxtBox().click();
+      console.log("Clicked on Login button in the new screen");
       await this.inputs.accountTxtBox().setValue(process.env.Account_Val!);
       console.log("Entered the account value");
       const isNoOptionsVisible = await this.buttons.noOptions().isDisplayed();
