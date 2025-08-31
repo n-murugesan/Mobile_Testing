@@ -51,6 +51,7 @@ jobs:
           mkdir -p "$HOME/.android" "$ANDROID_AVD_HOME"
           : > "$HOME/.android/repositories.cfg"
 
+          # Accept licenses
           set +o pipefail
           yes | "$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null
           set -o pipefail
@@ -68,11 +69,13 @@ jobs:
               --abi "google_apis_playstore/x86_64"
             printf 'hw.cpu.ncore=3\n' >> "$AVD_DIR/config.ini"
           else
-            echo "AVD already present at $AVD_DIR (restored)."
+            echo "AVD already present at $AVD_DIR."
           fi
 
       - name: Run Appium Tests on Emulator
         uses: reactivecircus/android-emulator-runner@v2
+        env:
+          ANDROID_EMULATOR_WAIT_TIME_BEFORE_KILL: 60
         with:
           avd-name: ${{ env.AVD_NAME }}
           api-level: 35
@@ -80,7 +83,8 @@ jobs:
           arch: x86_64
           ram-size: 2048M
           disk-size: 2048M
-          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
+          force-avd-creation: false
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           disable-animations: true
           script: |
             set -ex
@@ -88,30 +92,50 @@ jobs:
             until adb shell getprop sys.boot_completed 2>/dev/null | grep -q "1"; do sleep 1; done
             until adb shell dumpsys window 2>/dev/null | grep -q mCurrentFocus; do sleep 1; done
 
+            # Disable setup wizards & provisioners
+            adb shell settings put global device_provisioned 1 || true
+            adb shell settings put secure user_setup_complete 1 || true
+            adb shell cmd package list packages com.google.android.setupwizard | grep -q com.google.android.setupwizard && adb shell pm disable-user --user 0 com.google.android.setupwizard || true
+            adb shell cmd package list packages com.android.provision | grep -q com.android.provision && adb shell pm disable-user --user 0 com.android.provision || true
+            adb shell cmd package list packages com.android.managedprovisioning | grep -q com.android.managedprovisioning && adb shell pm disable-user --user 0 com.android.managedprovisioning || true
+            adb shell cmd package list packages com.android.onetimeinitializer | grep -q com.android.onetimeinitializer && adb shell pm disable-user --user 0 com.android.onetimeinitializer || true
+
+            # Disable animations
+            adb shell settings put global window_animation_scale 0 || true
+            adb shell settings put global transition_animation_scale 0 || true
+            adb shell settings put global animator_duration_scale 0 || true
+            adb shell settings put global package_verifier_enable 0 || true
+            adb shell settings put global verifier_verify_adb_installs 0 || true
+
             echo "[SETUP] Pre-seeding Chrome with flags to skip welcome/sign-in..."
             adb shell 'echo "chrome --disable-fre --no-first-run --no-default-browser-check --disable-search-engine-choice-screen --disable-site-isolation-trials" > /data/local/tmp/chrome-command-line'
             adb shell am force-stop com.android.chrome || true
             adb shell pm clear com.android.chrome || true
 
             echo "[SETUP] Launching Chrome once..."
-            if adb shell monkey -p com.android.chrome -c android.intent.category.LAUNCHER 1; then
-              echo "[SETUP] Chrome launched successfully, seeded without prompts."
-            else
-              echo "[FALLBACK] Could not launch Chrome cleanly. Retrying with generic launch..."
-              adb shell am start -n com.android.chrome/com.google.android.apps.chrome.Main || true
-            fi
+            adb shell monkey -p com.android.chrome -c android.intent.category.LAUNCHER 1 \
+              || adb shell am start -n com.android.chrome/com.google.android.apps.chrome.Main || true
 
             adb shell am force-stop com.android.chrome || true
 
-            echo "[SETUP] Installing Appium + running WDIO tests..."
+            # Install & start Appium
             npm i -g appium@2.6.0
             appium driver list --installed || true
             appium --relaxed-security > appium.log 2>&1 &
             APP_PID=$!
             sleep 8
 
+            # Install app under test
             if [ -f app.apk ]; then adb install -r app.apk || true; fi
+
+            # Run WDIO tests
             npx wdio run wdio.conf.ts | tee wdio_output.txt
+
+            # Capture screenshot/logs
+            adb shell screencap /sdcard/screenshot.png || true
+            adb pull /sdcard/screenshot.png ./screenshot.png || true
+            adb logcat -d >> emulator_logcat.txt || true
+
             kill $APP_PID || true
             adb -s emulator-5554 emu kill || true
 
