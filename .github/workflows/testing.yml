@@ -49,7 +49,6 @@ jobs:
           mkdir -p "$HOME/.android" "$ANDROID_AVD_HOME"
           : > "$HOME/.android/repositories.cfg"
 
-          # Accept licenses
           yes | "$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --licenses || true
 
           "$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --install \
@@ -107,8 +106,7 @@ jobs:
             adb shell pm clear com.android.chrome || true
 
             echo "[SETUP] Launching Chrome once..."
-            adb shell monkey -p com.android.chrome -c android.intent.category.LAUNCHER 1 \
-              || adb shell am start -n com.android.chrome/com.google.android.apps.chrome.Main -d "https://www.google.com" || true
+            adb shell monkey -p com.android.chrome -c android.intent.category.LAUNCHER 1 || true
             adb shell am force-stop com.android.chrome || true
 
             # Start Appium
