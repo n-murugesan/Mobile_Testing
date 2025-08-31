@@ -18,6 +18,10 @@ jobs:
       ANDROID_AVD_HOME: /home/runner/.android/avd
       ANDROID_EMULATOR_WAIT_TIME_BEFORE_KILL: 60
 
+      # TEMP creds (move to GitHub secrets later!)
+      GOOGLE_EMAIL: "ashish.prasad@alvaria.com"
+      GOOGLE_PASSWORD: "Goodsheep66$$"
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -51,7 +55,10 @@ jobs:
           mkdir -p "$HOME/.android" "$ANDROID_AVD_HOME"
           : > "$HOME/.android/repositories.cfg"
 
-          yes | "$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          # Accept licenses
+          set +o pipefail
+          yes | "$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null
+          set -o pipefail
 
           "$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --install \
             "platform-tools" "platforms;android-35" "emulator" \
@@ -65,6 +72,8 @@ jobs:
               --package "system-images;android-35;google_apis_playstore;x86_64" \
               --abi "google_apis_playstore/x86_64"
             printf 'hw.cpu.ncore=3\n' >> "$AVD_DIR/config.ini"
+          else
+            echo "AVD already present at $AVD_DIR (restored)."
           fi
 
       - name: Run Appium Tests on Emulator
@@ -84,29 +93,27 @@ jobs:
             until adb shell getprop sys.boot_completed 2>/dev/null | grep -q "1"; do sleep 1; done
             until adb shell dumpsys window 2>/dev/null | grep -q mCurrentFocus; do sleep 1; done
 
-            # --- PRELOAD CHROME IN GUEST MODE TO SKIP FRE ---
             echo "[SETUP] Launching Chrome in Guest mode..."
-            adb shell am start -n com.android.chrome/com.google.android.apps.chrome.Main \
-              -d "https://www.google.com" \
-              --activity-options "--guest" || true
-            sleep 5
-            adb shell am force-stop com.android.chrome || true
-            echo "[SETUP] Chrome seeded."
+            if adb shell am start -n com.android.chrome/com.google.android.apps.chrome.Main -d "https://www.google.com" --activity-options "--guest"; then
+              echo "[SETUP] Chrome launched in Guest mode successfully."
+              sleep 5
+              adb shell am force-stop com.android.chrome || true
+            else
+              echo "[FALLBACK] Guest mode not supported. Seeding Chrome with monkey..."
+              adb shell monkey -p com.android.chrome -c android.intent.category.LAUNCHER 1
+              sleep 5
+              adb shell am force-stop com.android.chrome || true
+            fi
 
-            # Optional: disable extra setup packages
-            adb shell settings put global device_provisioned 1 || true
-            adb shell settings put secure user_setup_complete 1 || true
-
-            # Start Appium + Tests
+            echo "[SETUP] Installing Appium + running WDIO tests..."
             npm i -g appium@2.6.0
-            appium driver install uiautomator2
+            appium driver list --installed || true
             appium --relaxed-security > appium.log 2>&1 &
             APP_PID=$!
             sleep 8
 
             if [ -f app.apk ]; then adb install -r app.apk || true; fi
             npx wdio run wdio.conf.ts | tee wdio_output.txt
-
             kill $APP_PID || true
             adb -s emulator-5554 emu kill || true
 
