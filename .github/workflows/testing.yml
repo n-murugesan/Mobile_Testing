@@ -133,3 +133,8 @@ jobs:
             wdio_output.txt
             screenshot.png
             appium.log
+            before_account_set.png
+            page_source_before_set.txt
+            contexts_before_set.txt
+            device_logs_before_set.txt
+            
