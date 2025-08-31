@@ -68,6 +68,7 @@ export class LoginPage {
       await useWithoutAccountBtn.waitForDisplayed({ timeout: 10000 });
       await useWithoutAccountBtn.click();
       console.log("clicked on dismiss");
+      await browser.pause(10000);
       try {
             // Capture screenshot of current screen
             await driver.saveScreenshot('before_account_set.png');
