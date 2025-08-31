@@ -10,7 +10,6 @@ jobs:
     timeout-minutes: 75
 
     env:
-      # Android / AVD
       AVD_NAME: api35-x86_64-play
       SDK_ROOT: /usr/local/lib/android/sdk
       ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
@@ -36,27 +35,22 @@ jobs:
 
       - name: Install Node deps
         run: |
-          if [ -f package-lock.json ]; then npm ci;
-          elif [ -f package.json ]; then npm i; fi
+          if [ -f package-lock.json ]; then npm ci; elif [ -f package.json ]; then npm i; fi
 
-      # Hardware acceleration on Ubuntu
       - name: Enable KVM group perms
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
 
-      # Ensure SDK + AVD exist
       - name: Install SDK packages & ensure AVD exists
-        shell: bash
         run: |
           set -euxo pipefail
           mkdir -p "$HOME/.android" "$ANDROID_AVD_HOME"
           : > "$HOME/.android/repositories.cfg"
 
-          set +o pipefail
-          yes | "$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null
-          set -o pipefail
+          # Accept licenses
+          yes | "$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --licenses || true
 
           "$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --install \
             "platform-tools" "platforms;android-35" "emulator" \
@@ -71,7 +65,7 @@ jobs:
               --abi "google_apis_playstore/x86_64"
             printf 'hw.cpu.ncore=3\n' >> "$AVD_DIR/config.ini"
           else
-            echo "AVD already present at $AVD_DIR (restored)."
+            echo "AVD already exists."
           fi
 
       - name: Run Appium Tests on Emulator
@@ -92,17 +86,15 @@ jobs:
             until adb shell getprop sys.boot_completed 2>/dev/null | grep -q "1"; do sleep 1; done
             until adb shell dumpsys window 2>/dev/null | grep -q mCurrentFocus; do sleep 1; done
 
-            # Mark device provisioned
+            # Disable setup wizards
             adb shell settings put global device_provisioned 1 || true
             adb shell settings put secure user_setup_complete 1 || true
-
-            # Disable setup wizard / provisioning if present
             adb shell cmd package list packages com.google.android.setupwizard | grep -q com.google.android.setupwizard && adb shell pm disable-user --user 0 com.google.android.setupwizard || true
             adb shell cmd package list packages com.android.provision | grep -q com.android.provision && adb shell pm disable-user --user 0 com.android.provision || true
             adb shell cmd package list packages com.android.managedprovisioning | grep -q com.android.managedprovisioning && adb shell pm disable-user --user 0 com.android.managedprovisioning || true
             adb shell cmd package list packages com.android.onetimeinitializer | grep -q com.android.onetimeinitializer && adb shell pm disable-user --user 0 com.android.onetimeinitializer || true
 
-            # Disable animations & verifiers
+            # Disable animations
             adb shell settings put global window_animation_scale 0 || true
             adb shell settings put global transition_animation_scale 0 || true
             adb shell settings put global animator_duration_scale 0 || true
@@ -115,26 +107,19 @@ jobs:
             adb shell pm clear com.android.chrome || true
 
             echo "[SETUP] Launching Chrome once..."
-            if ! adb shell monkey -p com.android.chrome -c android.intent.category.LAUNCHER 1; then
-              adb shell am start -n com.android.chrome/com.google.android.apps.chrome.Main || true
-            fi
+            adb shell monkey -p com.android.chrome -c android.intent.category.LAUNCHER 1 \
+              || adb shell am start -n com.android.chrome/com.google.android.apps.chrome.Main -d "https://www.google.com" || true
             adb shell am force-stop com.android.chrome || true
 
             # Start Appium
             npm i -g appium@2.6.0
-            appium driver list --installed || true
             appium --relaxed-security > appium.log 2>&1 &
             APP_PID=$!
             sleep 8
 
-            # Install app & run WDIO tests
+            # Install app and run tests
             if [ -f app.apk ]; then adb install -r app.apk || true; fi
             npx wdio run wdio.conf.ts | tee wdio_output.txt
-
-            # Collect artifacts
-            adb shell screencap /sdcard/screenshot.png || true
-            adb pull /sdcard/screenshot.png ./screenshot.png || true
-            adb logcat -d >> emulator_logcat.txt || true
 
             kill $APP_PID || true
             adb -s emulator-5554 emu kill || true
