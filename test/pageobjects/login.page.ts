@@ -63,6 +63,11 @@ export class LoginPage {
       await this.buttons.Login().click();
       console.log("Clicked on Login button");
       await browser.pause(10000);
+      console.log("trying to dismiss");
+      const useWithoutAccountBtn = await driver.$("id=com.android.chrome:id/signin_fre_dismiss_button");
+      await useWithoutAccountBtn.waitForDisplayed({ timeout: 10000 });
+      await useWithoutAccountBtn.click();
+      console.log("clicked on dismiss");
       try {
             // Capture screenshot of current screen
             await driver.saveScreenshot('before_account_set.png');
