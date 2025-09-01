@@ -100,12 +100,12 @@ jobs:
             adb shell settings put global package_verifier_enable 0 || true
             adb shell settings put global verifier_verify_adb_installs 0 || true
 
-            echo "[SETUP] Pre-seeding Chrome with flags..."
+            echo "seeding Chrome with flags..."
             adb shell 'echo "chrome --disable-fre --no-first-run --no-default-browser-check --disable-search-engine-choice-screen --disable-site-isolation-trials" > /data/local/tmp/chrome-command-line'
             adb shell am force-stop com.android.chrome || true
             adb shell pm clear com.android.chrome || true
 
-            echo "[SETUP] Launching Chrome once..."
+            echo "Launching Chrome once.(shell monkey)"
             adb shell monkey -p com.android.chrome -c android.intent.category.LAUNCHER 1 || true
             adb shell am force-stop com.android.chrome || true
 
