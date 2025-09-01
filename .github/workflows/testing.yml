@@ -1,4 +1,4 @@
-name: Appium Emulator CI (API 35 Google Play arm64-v8a)
+name: Appium Emulator CI (API 35 Google Play x86_64)
 
 on:
   push:
@@ -10,7 +10,7 @@ jobs:
     timeout-minutes: 75
 
     env:
-      AVD_NAME: api35-arm64-v8a-play
+      AVD_NAME: api35-x86_64-play
       SDK_ROOT: /usr/local/lib/android/sdk
       ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
       ANDROID_HOME: /usr/local/lib/android/sdk
@@ -53,15 +53,15 @@ jobs:
 
           "$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --install \
             "platform-tools" "platforms;android-35" "emulator" \
-            "system-images;android-35;google_apis_playstore;arm64-v8a"
+            "system-images;android-35;google_apis_playstore;x86_64"
 
           AVD_DIR="$ANDROID_AVD_HOME/${AVD_NAME}.avd"
           if [ ! -d "$AVD_DIR" ]; then
             echo "Creating AVD: $AVD_NAME"
             echo "no" | "$SDK_ROOT/cmdline-tools/latest/bin/avdmanager" create avd \
               --force -n "$AVD_NAME" \
-              --package "system-images;android-35;google_apis_playstore;arm64-v8a" \
-              --abi "google_apis_playstore/arm64-v8a"
+              --package "system-images;android-35;google_apis_playstore;x86_64" \
+              --abi "google_apis_playstore/x86_64"
             printf 'hw.cpu.ncore=3\n' >> "$AVD_DIR/config.ini"
           else
             echo "AVD already exists."
@@ -73,7 +73,7 @@ jobs:
           avd-name: ${{ env.AVD_NAME }}
           api-level: 35
           target: google_apis_playstore
-          arch: arm64-v8a
+          arch: x86_64
           ram-size: 2048M
           disk-size: 4096M
           force-avd-creation: false
@@ -111,7 +111,7 @@ jobs:
 
             # Start Appium
             npm i -g appium@2.6.0
-            appium --relaxed-security > appium.log 2>&1 & 
+            appium --relaxed-security > appium.log 2>&1 &
             APP_PID=$!
             sleep 8
 
@@ -133,7 +133,3 @@ jobs:
             wdio_output.txt
             screenshot.png
             appium.log
-            before_account_set.png
-            page_source_before_set.txt
-            contexts_before_set.txt
-            device_logs_before_set.txt
